@@ -184,6 +184,38 @@ systemctl status ex-lb
 systemctl reload ex-lb
 ```
 
+### MinIO Alias（mc）
+
+MinIO 账号信息：
+- 用户名：`admin`
+- 密码：`SugonMinio2024_pro`
+
+按城市设置 `mc alias`（可直接执行）：
+
+```bash
+mc alias set ksminio  http://minio.ksai.scnet.cn:9000 admin SugonMinio2024_pro
+mc alias set qdminio  http://minio.qdai.scnet.cn:9000 admin SugonMinio2024_pro
+mc alias set dzminio  http://minio.dzai.scnet.cn:9000 admin SugonMinio2024_pro
+mc alias set whminio  http://minio.whai.scnet.cn:9000 admin SugonMinio2024_pro
+mc alias set szminio  http://minio.szai.scnet.cn:9000 admin SugonMinio2024_pro
+mc alias set tjminio  http://minio.zzai.scnet.cn:9000 admin SugonMinio2024_pro
+mc alias set zzminio  http://minio.zzai2.scnet.cn:9000 admin SugonMinio2024_pro
+mc alias set xaoss    http://oss.scnet.cn:9000 admin SugonMinio2024_pro
+```
+
+### 西安中心 OSS 快速上传通道
+
+西安中心（oss.scnet.cn）可通过 HPC 跳板机上已配置好的 mc 客户端直接上传，速度最快：
+
+```bash
+# 通过 hpc-openai 跳板机操作西安 MinIO（alias: oss_scnet）
+ssh hpc-openai "~/mc ls oss_scnet/"                          # 列出所有桶
+ssh hpc-openai "~/mc ls oss_scnet/gitlab-lfs-prod/"          # 列出桶内容
+ssh hpc-openai "~/mc cp <远程路径> oss_scnet/<桶>/<路径>"      # 上传对象
+```
+
+> **说明**：`hpc-openai` 是本地 SSH config 中配置的别名（用户 `openaimodels`，主机 `eshell111.hpccube.com:65082`，密钥 `~/.ssh/openaimodels.rsa`），mc alias `oss_scnet` 对应 `http://11.13.5.211:9000`。
+
 ### 镜像管理
 
 > **⚠️ 硬性规则：集群节点无法访问外网，所有镜像必须使用内部 Harbor 地址 `image.ac.com:5000/k8s/<镜像名>`。**
