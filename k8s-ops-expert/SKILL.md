@@ -134,8 +134,8 @@ kubectl --context=<别名> get node -l resourceGroup=<resourcegroup>
 如果用户提供的是节点 hostname 而非 IP，可通过任意集群节点的 `/etc/hosts` 查找对应 IP：
 
 ```bash
-# 通过 node-shell 登录任意节点后查询
-kubectl --context=<别名> node-shell <任意节点IP> -- grep <hostname> /etc/hosts
+# 通过 node-shell 登录任意节点后查询（node-shell 场景下将 --context 放在子命令后）
+kubectl node-shell --context=<别名> <任意节点IP> -- grep <hostname> /etc/hosts
 ```
 
 ## 🔍 诊断工具集
@@ -164,7 +164,7 @@ kubectl --context=<别名> -n <namespace> get ingress
 
 ```bash
 # ✅ 正确 — 任何情况下优先使用 node-shell
-kubectl --context=<别名> node-shell <IP>
+kubectl node-shell --context=<别名> <IP>
 
 # ✅ 仅当节点 NotReady / Cordon 时 — 通过 kubeasz 跳板免密跳转
 kubectl --context=<别名> get node -l kubeasz=true -o wide   # 获取跳板 IP
@@ -206,7 +206,7 @@ uv run ~/k8s/thanos.py -h   # 查看参数详情
 kubectl --context=<别名> get node -l ex-lb=true -o wide
 
 # 登录 ex-lb 节点（如果是集群内节点，直接 node-shell）
-kubectl --context=<别名> node-shell <ex-lb节点IP>
+kubectl node-shell --context=<别名> <ex-lb节点IP>
 
 # 查看 ex-lb 服务状态（可定位配置文件、确认 reload 信息）
 systemctl status ex-lb
@@ -241,7 +241,7 @@ MinIO 主要存储 Prometheus、Loki、GitLab LFS 数据。
 kubectl --context=<别名> get node -l minio=true -o wide
 
 # 进入节点排查
-kubectl --context=<别名> node-shell <minio节点IP>
+kubectl node-shell --context=<别名> <minio节点IP>
 ```
 
 ### 西安中心 OSS 快速上传通道

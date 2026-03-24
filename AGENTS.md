@@ -79,7 +79,7 @@ Kubernetes 集群变更（kubectl）：
 ## 2.3 领域上下文加载
 
 集群上下文（Cluster Context / Namespace Map / Node Group Map / Troubleshooting Toolkit）
-不放在全局规则中，统一从 `k8s-ops-expert` 规则文件加载。
+不放在全局规则中，默认加载 `k8s-ops-expert/SKILL.md`。
 
 ## 2.4 技能仓库同步快捷指令
 
