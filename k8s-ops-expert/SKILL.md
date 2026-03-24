@@ -6,6 +6,16 @@ targets: ["*"]
 
 你现在进入 **K8s 运维专家模式**。
 
+## ✅ 全局执行约束（最高优先级）
+
+1. 所有 `kubectl` 命令必须显式带 `--context=<别名>`（包括 `get/describe/logs/top` 查询命令）。
+2. 严禁使用 `kubectl config use-context` / `kubectl config set-context` 修改全局上下文。
+3. 需要命名空间时必须显式带 `-n <namespace>`（或 `--namespace=<namespace>`）。
+4. 变更类命令（apply/delete/scale/rollout/patch/edit）执行前，必须先输出命令与影响范围并等待确认。
+
+**统一命令模板：**
+`kubectl --context=<别名> -n <namespace> <subcommand>`
+
 ## 🌐 集群资产（kubectl context 别名）
 
 | 别名 | 城市 | 环境 |
@@ -28,10 +38,7 @@ targets: ["*"]
 推荐方式：每条命令显式指定 `--context=<别名>`，命名空间使用 `-n <namespace>`（或 `--namespace=<namespace>`）。
 示例：`kubectl --context=wq -n monitoring get po`
 
-> **⚠️ 硬性规则：严禁使用 `kubectl config use-context` 或 `kubectl config set-context` 切换集群/命名空间。**
-> 原因：`kubectl config` 会修改全局 kubeconfig，多终端/多会话会互相干扰，可能把命令发到错误集群。
-> 必须使用显式 `kubectl --context=<别名>` 执行命令，避免上下文污染。
-> **所有 `kubectl` 命令（包括 `get/describe/logs/top` 查询命令）都必须显式带 `--context=<别名>`。**
+上下文切换与执行约束以“全局执行约束”章节为准。
 
 ## 🏗️ 架构底座
 
@@ -111,15 +118,15 @@ docker exec -it kubeasz ezctl del-node <cluster> <IP,IP,IP>
 
 ```bash
 # 查询特殊角色节点
-kubectl get node -l kubeasz=true -o wide
-kubectl get node -l ex-lb=true -o wide
-kubectl get node -l app=ske -o wide
+kubectl --context=<别名> get node -l kubeasz=true -o wide
+kubectl --context=<别名> get node -l ex-lb=true -o wide
+kubectl --context=<别名> get node -l app=ske -o wide
 
 # 查询所有资源组
-kubectl get resourcegroup -n kube-system
+kubectl --context=<别名> -n kube-system get resourcegroup
 
 # 查询资源组下的节点（同规格节点会带 resourceGroup= 标签）
-kubectl get node -l resourceGroup=<resourcegroup>
+kubectl --context=<别名> get node -l resourceGroup=<resourcegroup>
 ```
 
 ### Hostname → IP 解析
@@ -128,10 +135,27 @@ kubectl get node -l resourceGroup=<resourcegroup>
 
 ```bash
 # 通过 node-shell 登录任意节点后查询
-kubectl node-shell <任意节点IP> -- grep <hostname> /etc/hosts
+kubectl --context=<别名> node-shell <任意节点IP> -- grep <hostname> /etc/hosts
 ```
 
 ## 🔍 诊断工具集
+
+### 高频排障命令模板
+
+```bash
+# 工作负载状态
+kubectl --context=<别名> -n <namespace> get po -o wide
+kubectl --context=<别名> -n <namespace> describe po <pod>
+
+# 事件与资源
+kubectl --context=<别名> -n <namespace> get events --sort-by=.lastTimestamp | tail -n 30
+kubectl --context=<别名> top node
+kubectl --context=<别名> -n <namespace> top po
+
+# 服务链路
+kubectl --context=<别名> -n <namespace> get svc,ep
+kubectl --context=<别名> -n <namespace> get ingress
+```
 
 ### 登录节点
 
@@ -140,10 +164,10 @@ kubectl node-shell <任意节点IP> -- grep <hostname> /etc/hosts
 
 ```bash
 # ✅ 正确 — 任何情况下优先使用 node-shell
-kubectl node-shell <IP>
+kubectl --context=<别名> node-shell <IP>
 
 # ✅ 仅当节点 NotReady / Cordon 时 — 通过 kubeasz 跳板免密跳转
-kubectl get node -l kubeasz=true -o wide   # 获取跳板 IP
+kubectl --context=<别名> get node -l kubeasz=true -o wide   # 获取跳板 IP
 ssh <跳板IP> "ssh <目标IP>"
 
 # ❌ 错误 — 严禁直接 SSH
@@ -154,7 +178,7 @@ ssh <节点IP>
 
 ```bash
 # 在线日志
-kubectl logs <pod> -n <namespace> [--previous] [-f] [--tail=100]
+kubectl --context=<别名> -n <namespace> logs <pod> [--previous] [-f] [--tail=100]
 
 # 历史/离线日志（Loki）
 uv run ~/k8s/loki.py -h   # 查看参数详情
@@ -179,10 +203,10 @@ uv run ~/k8s/thanos.py -h   # 查看参数详情
 
 ```bash
 # 查询当前集群的 ex-lb 节点
-kubectl get node -l ex-lb=true -o wide
+kubectl --context=<别名> get node -l ex-lb=true -o wide
 
 # 登录 ex-lb 节点（如果是集群内节点，直接 node-shell）
-kubectl node-shell <ex-lb节点IP>
+kubectl --context=<别名> node-shell <ex-lb节点IP>
 
 # 查看 ex-lb 服务状态（可定位配置文件、确认 reload 信息）
 systemctl status ex-lb
@@ -191,28 +215,33 @@ systemctl status ex-lb
 systemctl reload ex-lb
 ```
 
-### MinIO 
+### MinIO
 
-minio被用于存储Prometheus和loki,还有gitlab lfs的数据.
-他们对应的桶分别是:
-- Prometheus:prom
-- loki:loki
-- gitlablfs: gitlab-lfs-prod
+MinIO 主要存储 Prometheus、Loki、GitLab LFS 数据。
 
-你可以通过本地的mc客户端来访问不同的集群的minio:
-昆山集群的minio: mc ls ksminio/
-青岛集群的minio: mc ls ksminio/
-达州集群的minio: mc ls dzminio/
-武汉集群的minio: mc ls whminio/
-深圳集群的minio: mc ls szminio/
-郑州集群的minio: mc ls zzminio/
-天津集群的minio: mc ls tjminio/
-西安集群的minio: mc ls xaminio/
-魏桥集群的minio: mc ls wqminio/
+常用桶：
+- Prometheus: `prom`
+- Loki: `loki`
+- GitLab LFS: `gitlab-lfs-prod`
 
-如果某个集群的minio服务有问题, 你可以通过标签为minio=true的标签找到对应的节点, 上去排查问题
+本地 `mc` 别名（示例）：
+- 昆山：`mc ls ksminio/`
+- 青岛：`mc ls qdminio/`
+- 达州：`mc ls dzminio/`
+- 武汉：`mc ls whminio/`
+- 深圳：`mc ls szminio/`
+- 郑州：`mc ls zzminio/`
+- 天津：`mc ls tjminio/`
+- 魏桥：`mc ls wqminio/`
 
+当 MinIO 服务异常时，先定位节点再排查：
 
+```bash
+# 找到 MinIO 节点
+kubectl --context=<别名> get node -l minio=true -o wide
+
+# 进入节点排查
+kubectl --context=<别名> node-shell <minio节点IP>
 ```
 
 ### 西安中心 OSS 快速上传通道
@@ -247,7 +276,7 @@ image: image.ac.com:5000/k8s/xxx/yyy:v1.0
 
 ```bash
 # 1. 获取有外网的 kubeasz 跳板节点 IP
-kubectl get node -l kubeasz=true -o wide
+kubectl --context=<别名> get node -l kubeasz=true -o wide
 
 # 2. SSH 登录跳板节点
 ssh <跳板IP>
@@ -262,7 +291,7 @@ docker push image.ac.com:5000/k8s/<镜像名>:<tag>
 
 ## 🛡️ 安全操作规范
 
-**变更操作（apply / delete / scale / rollout restart）前必须：**
+**变更操作（apply / delete / scale / rollout / patch / edit）前必须：**
 1. 命令中显式带 `--context=<别名>`（必要时同时带 `-n <namespace>`）确认目标集群
 2. 输出命令和预期影响，等待确认
 
