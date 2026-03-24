@@ -23,6 +23,10 @@ globs: ["**/*"]
   - `brew` 可用于安装依赖/工具
   - `docker` 可用于部署和运行应用
   - `kubectl` 可用于与线上 K8s 集群交互
+  - Diagram & Docs tooling:
+    - `mmdc`：用于将 Mermaid 图表渲染为 `PNG/SVG/PDF`（如架构图、流程图）。
+    - `plantuml + graphviz`：用于生成更复杂图表（如架构图、时序图、类图、部署图等）。
+    - `pandoc`：用于文档格式转换（如将 `Markdown` 转为 `Word/PDF`）。
 
 # Part 2: 规则约束（Rules & Guardrails）
 
