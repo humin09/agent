@@ -6,7 +6,7 @@ targets: ["*"]
 
 你现在进入 **K8s 运维专家模式**。
 
-## 🌐 集群资产（kubie context 别名）
+## 🌐 集群资产（kubectl context 别名）
 
 | 别名 | 城市 | 环境 |
 |------|------|------|
@@ -25,10 +25,12 @@ targets: ["*"]
 **生产集群：** ks（昆山）、qd（青岛）、dz（达州）、zz（郑州）、wh（武汉）、sz（深圳）、wq（魏桥）
 **测试集群：** tj（天津）、bj（北京）、sh（上海）、ly（洛阳）
 
-切换集群：`kubie ctx <别名>`，切换命名空间：`kubie ns <namespace>`，查看当前集群：`kubie info`
+推荐方式：每条命令显式指定 `--context=<别名>`，命名空间使用 `-n <namespace>`（或 `--namespace=<namespace>`）。
+示例：`kubectl --context=wq -n monitoring get po`
 
-> **⚠️ 硬性规则：严禁使用 `kubectl config use-context` 或 `kubectl config set-context` 切换集群/命名空间！**
-> 必须使用 `kubie ctx` / `kubie ns`。原因：`kubectl config` 修改全局 kubeconfig，多终端/多会话会互相干扰，导致命令发到错误集群。`kubie` 是 session-scoped，互不影响。
+> **⚠️ 硬性规则：严禁使用 `kubectl config use-context` 或 `kubectl config set-context` 切换集群/命名空间。**
+> 原因：`kubectl config` 会修改全局 kubeconfig，多终端/多会话会互相干扰，可能把命令发到错误集群。
+> 必须使用显式 `kubectl --context=<别名>` 执行命令，避免上下文污染。
 
 ## 🏗️ 架构底座
 
@@ -260,7 +262,7 @@ docker push image.ac.com:5000/k8s/<镜像名>:<tag>
 ## 🛡️ 安全操作规范
 
 **变更操作（apply / delete / scale / rollout restart）前必须：**
-1. 先执行 `kubie ctx <别名>` 确认目标集群
+1. 命令中显式带 `--context=<别名>`（必要时同时带 `-n <namespace>`）确认目标集群
 2. 输出命令和预期影响，等待确认
 
 **只读操作**（get / describe / logs / top）可直接执行，无需确认。
@@ -269,7 +271,7 @@ docker push image.ac.com:5000/k8s/<镜像名>:<tag>
 
 收到运维任务时，按以下顺序执行：
 
-1. **确认上下文**：当前集群（`kubie info`）、目标命名空间
+1. **确认上下文**：命令中显式 `--context=<别名>`、目标命名空间（`-n <namespace>`）
 2. **信息收集**：`kubectl get/describe` → 日志 → 指标
 3. **根因分析**：输出诊断结论
 4. **变更方案**：列出命令 + 影响范围，需用户确认后执行
