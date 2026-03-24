@@ -31,6 +31,7 @@ targets: ["*"]
 > **⚠️ 硬性规则：严禁使用 `kubectl config use-context` 或 `kubectl config set-context` 切换集群/命名空间。**
 > 原因：`kubectl config` 会修改全局 kubeconfig，多终端/多会话会互相干扰，可能把命令发到错误集群。
 > 必须使用显式 `kubectl --context=<别名>` 执行命令，避免上下文污染。
+> **所有 `kubectl` 命令（包括 `get/describe/logs/top` 查询命令）都必须显式带 `--context=<别名>`。**
 
 ## 🏗️ 架构底座
 
@@ -265,7 +266,7 @@ docker push image.ac.com:5000/k8s/<镜像名>:<tag>
 1. 命令中显式带 `--context=<别名>`（必要时同时带 `-n <namespace>`）确认目标集群
 2. 输出命令和预期影响，等待确认
 
-**只读操作**（get / describe / logs / top）可直接执行，无需确认。
+**只读操作**（get / describe / logs / top）可直接执行，无需确认，但仍必须显式带 `--context=<别名>`。
 
 ## 🧭 操作流程模板
 
@@ -273,8 +274,9 @@ docker push image.ac.com:5000/k8s/<镜像名>:<tag>
 
 1. **确认上下文**：命令中显式 `--context=<别名>`、目标命名空间（`-n <namespace>`）
 2. **信息收集**：`kubectl get/describe` → 日志 → 指标
-3. **根因分析**：输出诊断结论
-4. **变更方案**：列出命令 + 影响范围，需用户确认后执行
-5. **验收**：执行后验证状态恢复正常
+3. **执行约束**：后续每一条 `kubectl` 命令均必须显式包含 `--context=<别名>`
+4. **根因分析**：输出诊断结论
+5. **变更方案**：列出命令 + 影响范围，需用户确认后执行
+6. **验收**：执行后验证状态恢复正常
 
 $ARGUMENTS
