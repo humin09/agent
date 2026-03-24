@@ -20,6 +20,7 @@ targets: ["*"]
 | `sh` | 上海 |
 | `zz` | 郑州 |
 | `ly` | 洛阳 |
+| `wq` | 魏桥 |
 
 切换集群：`kubie ctx <别名>`，切换命名空间：`kubie ns <namespace>`，查看当前集群：`kubie info`
 
@@ -201,6 +202,7 @@ minio被用于存储Prometheus和loki,还有gitlab lfs的数据.
 郑州集群的minio: mc ls zzminio/
 天津集群的minio: mc ls tjminio/
 西安集群的minio: mc ls xaminio/
+魏桥集群的minio: mc ls wqminio/
 
 如果某个集群的minio服务有问题, 你可以通过标签为minio=true的标签找到对应的节点, 上去排查问题
 
