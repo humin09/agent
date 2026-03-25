@@ -16,6 +16,12 @@ targets: ["*"]
 **统一命令模板：**
 `kubectl --context=<别名> -n <namespace> <subcommand>`
 
+**插件命令例外（`node-shell`）**：
+`kubectl node-shell --context=<别名> <节点IP> [-- <command>]`
+
+> 注意：`kubectl --context=<别名> node-shell ...` 是错误写法，`kubectl` 会报
+> `flags cannot be placed before plugin name`。
+
 ## 🌐 集群资产（kubectl context 别名）
 
 | 别名 | 城市 | 环境 |
@@ -166,6 +172,9 @@ kubectl --context=<别名> -n <namespace> get ingress
 # ✅ 正确 — 任何情况下优先使用 node-shell
 kubectl node-shell --context=<别名> <IP>
 
+# ❌ 错误 — --context 放在 plugin(node-shell) 前会报错
+kubectl --context=<别名> node-shell <IP>
+
 # ✅ 仅当节点 NotReady / Cordon 时 — 通过 kubeasz 跳板免密跳转
 kubectl --context=<别名> get node -l kubeasz=true -o wide   # 获取跳板 IP
 ssh <跳板IP> "ssh <目标IP>"
@@ -307,5 +316,56 @@ docker push image.ac.com:5000/k8s/<镜像名>:<tag>
 4. **根因分析**：输出诊断结论
 5. **变更方案**：列出命令 + 影响范围，需用户确认后执行
 6. **验收**：执行后验证状态恢复正常
+
+## 📊 Grafana 快速定位索引（ks）
+
+> 说明：以下为 `2026-03-25` 快照，用于“路径 + panel 名”快速命中 dashboard，减少全量查询。
+> 优先匹配顺序：`dashboard uid` > `folder/title` > `panel title`。
+
+### 1) 路径 → UID（常用）
+
+| 路径 | UID |
+|------|-----|
+| `/DeepSeek` | `deepseek` |
+| `ai/运营101` | `becc3itr2rbb4d` |
+| `ai/模型部署` | `adslfq8amercw4` |
+| `ai/模型训练` | `bea4kzmry7qiod` |
+| `ai/Notebook` | `adslfq8amercwa` |
+| `ai/gpu` | `Oxed_c6Wz` |
+| `ai/k8s节点pod监控` | `cdr4et6t9nt34c` |
+| `ai/etcd监控` | `hzhXdzznZn` |
+| `ai/节点详情` | `xfpJB9FGz` |
+| `ai/Pod 资源计量` | `aeh6piwqe1gjkb` |
+| `ai/Pod 调度时间指标` | `be767fzozug3kd` |
+| `ai/k8s 资源日志事件` | `k8s_topology_loki` |
+| `ai/vLLM` | `b281712d-8bff-41ef-9f3f-71ad43c05e9b` |
+| `ai/节点列表` | `bensv5jok3hmoe` |
+
+### 2) UID → 配置来源（CM 托管）
+
+| UID | Dashboard | 配置来源 |
+|-----|-----------|----------|
+| `becc3itr2rbb4d` | 运营101 | `cm://prom-grafana-dashboards-custom/101.json` |
+| `adslfq8amercw4` | 模型部署 | `cm://prom-grafana-dashboards-custom/inference.json` |
+| `bea4kzmry7qiod` | 模型训练 | `cm://prom-grafana-dashboards-custom/training.json` |
+| `adslfq8amercwa` | Notebook | `cm://prom-grafana-dashboards-custom/notebook.json` |
+| `Oxed_c6Wz` | gpu | `cm://prom-grafana-dashboards-custom/nvidia.json` |
+| `cdr4et6t9nt34c` | k8s节点pod监控 | `cm://prom-grafana-dashboards-custom/kubernetes-pod-metrics.json` |
+| `hzhXdzznZn` | etcd监控 | `cm://prom-grafana-dashboards-custom/etcd-cluster.json` |
+| `xfpJB9FGz` | 节点详情 | `cm://prom-grafana-dashboards-custom/node-exporter.json` |
+| `aeh6piwqe1gjkb` | Pod 资源计量 | `cm://prom-grafana-dashboards-custom/pod_time.json` |
+
+### 3) API-only（Grafana UI 中存在，但不在上述 CM）
+
+- `deepseek` (`/DeepSeek`)：Grafana API 中存在，非当前 `prom-grafana-dashboards-custom` 托管。
+- `b281712d-8bff-41ef-9f3f-71ad43c05e9b` (`ai/vLLM`)：API-only。
+- `bensv5jok3hmoe` (`ai/节点列表`)：API-only。
+
+### 4) 面板定位执行约定（Grafana 场景）
+
+1. 用户提供 `路径 + panel 名` 后，先按“路径 → UID”直接命中 dashboard。
+2. 若 UID 落在 `CM 托管`，直接编辑对应 JSON key；若为 `API-only`，走 Grafana API。
+3. 面板改动前，必须先备份原 dashboard JSON。
+4. 需要核验数据时，再去 Thanos 校验指标与标签，不做无关扫描。
 
 $ARGUMENTS
