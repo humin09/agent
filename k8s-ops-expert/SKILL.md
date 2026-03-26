@@ -210,6 +210,9 @@ uv run ~/k8s/thanos.py -h   # 查看参数详情
 
 所有集群的 ex-lb 节点通过标签 `ex-lb=true` 标识：
 
+- **配置文件目录**：`/etc/ex-lb/conf`
+- **服务管理**：通过 `systemctl` 管理（`status` / `reload`）
+
 ```bash
 # 查询当前集群的 ex-lb 节点
 kubectl --context=<别名> get node -l ex-lb=true -o wide
@@ -220,7 +223,10 @@ kubectl node-shell --context=<别名> <ex-lb节点IP>
 # 查看 ex-lb 服务状态（可定位配置文件、确认 reload 信息）
 systemctl status ex-lb
 
-# 按服务能力重载配置
+# 查看/编辑 ex-lb 配置
+ls /etc/ex-lb/conf/
+
+# 重新加载配置（修改配置后执行）
 systemctl reload ex-lb
 ```
 
