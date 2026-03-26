@@ -325,14 +325,17 @@ docker push image.ac.com:5000/k8s/<镜像名>:<tag>
 
 ## 📊 Grafana 快速定位索引（ks）
 
-> 说明：以下为 `2026-03-25` 快照，用于“路径 + panel 名”快速命中 dashboard，减少全量查询。
+- **外部 URL**：`https://grafana.ksai.scnet.cn:58043`
+- **认证**：`admin/sugon-prom`
+
+> 说明：以下为 `2026-03-25` 快照，用于”路径 + panel 名”快速命中 dashboard，减少全量查询。
 > 优先匹配顺序：`dashboard uid` > `folder/title` > `panel title`。
 
 ### 1) 路径 → UID（常用）
 
 | 路径 | UID |
 |------|-----|
-| `/DeepSeek` | `deepseek` |
+| `ai/maas` | `deepseek` |
 | `ai/运营101` | `becc3itr2rbb4d` |
 | `ai/模型部署` | `adslfq8amercw4` |
 | `ai/模型训练` | `bea4kzmry7qiod` |
@@ -363,7 +366,7 @@ docker push image.ac.com:5000/k8s/<镜像名>:<tag>
 
 ### 3) API-only（Grafana UI 中存在，但不在上述 CM）
 
-- `deepseek` (`/DeepSeek`)：Grafana API 中存在，非当前 `prom-grafana-dashboards-custom` 托管。
+- `deepseek` (`ai/maas`)：Grafana API 中存在，非当前 `prom-grafana-dashboards-custom` 托管。
 - `b281712d-8bff-41ef-9f3f-71ad43c05e9b` (`ai/vLLM`)：API-only。
 - `bensv5jok3hmoe` (`ai/节点列表`)：API-only。
 
