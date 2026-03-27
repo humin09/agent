@@ -23,6 +23,12 @@ globs: ["**/*"]
 
 ## Part 2: 通用规则（Rules & Guardrails）
 
+### 2.0 全局注意事项（高频易错）
+
+- `kubectl node-shell` 属于 kubectl 插件，`--context` 必须写在 `node-shell` 后面。
+- 正确写法：`kubectl node-shell --context=<别名> <节点IP> [-- <command>]`
+- 错误写法：`kubectl --context=<别名> node-shell ...`（会报 `flags cannot be placed before plugin name`）
+
 ### 2.1 通用偏好（默认遵循）
 
 1. Agentic 编程优先使用 Python。
