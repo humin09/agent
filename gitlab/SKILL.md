@@ -196,7 +196,79 @@ curl -k --header "PRIVATE-TOKEN: $TOKEN" \
    - 子集群 → 主集群公网回源：`curl -I http://221.11.21.199:9000`
 4. **查看 GitLab LFS 日志**：`gitlab-ctl tail gitlab-rails/production.log | grep lfs`
 
-## 5. 安全注意事项
+## 5. LFS 对象排查与补充工具
+
+### 5.1 背景
+
+GitLab 部分仓库的 LFS 指针映射的 object 在 MinIO (`gitlab-lfs-prod`) 中丢失，导致 `git clone` / `git lfs pull` 失败。拆分为两个独立脚本：
+
+| 脚本 | 位置 | 执行环境 | 功能 |
+|------|------|----------|------|
+| `check_lfs.py` | `~/agent/gitlab/check_lfs.py` | 本地 | 排查仓库 LFS object 缺失 |
+| `upload_lfs.py` | xa-login:`/tmp/upload_lfs.py` | xa-login | 上传本地文件补充 LFS object |
+
+### 5.2 check_lfs.py — 排查仓库 LFS object 缺失
+
+浅克隆指定仓库（`GIT_LFS_SKIP_SMUDGE=1`），遍历工作区中符合 LFS 后缀的文件，解析 LFS 指针获取 OID，用 `mc stat` 检查 object 是否存在。
+
+```bash
+# 直接传仓库 URL
+python3 ~/agent/gitlab/check_lfs.py \
+  https://gitlab.scnet.cn:9002/model/sugon_scnet/DeepSeek-V3.2.git \
+  https://gitlab.scnet.cn:9002/model/sugon_scnet/Wan2.2-Animate-14B.git
+
+# 从文件读取仓库列表（每行一个 URL，# 开头为注释）
+python3 ~/agent/gitlab/check_lfs.py -f repos.txt
+```
+
+参数：
+- 位置参数：GitLab 仓库 URL（可多个）
+- `-f / --file`：从文件读取仓库 URL 列表
+
+环境变量：`GITLAB_USER` / `GITLAB_PASS`（默认 root / SugonHpc2024_pro），`MC`（mc 路径，默认 `mc`）。
+
+输出：每个仓库的 LFS 指针总数、已有数、缺失数，以及缺失明细（OID + 文件名 + 大小）。有缺失时 exit 1。
+
+### 5.3 upload_lfs.py — 上传本地 LFS 文件到 MinIO
+
+在 xa-login 上执行。扫描本地目录中符合 LFS 后缀的文件，计算 `sha256` 得到 OID，按 `gitlab-lfs-prod/{oid[0:2]}/{oid[2:4]}/{oid[4:]}` 路径上传。已存在的自动跳过。
+
+```bash
+# 直接传目录
+python3 /tmp/upload_lfs.py \
+  /work/home/openaimodels/ai_community/model/Qwen/Qwen3.5-27B \
+  /work/home/openaimodels/ai_community/re_model/deepseek-ai/Janus-Pro-7B
+
+# 从文件读取目录列表，并发 16
+python3 /tmp/upload_lfs.py -f /tmp/dirs.txt -j 16
+
+# dry-run 仅检查不上传
+python3 /tmp/upload_lfs.py --dry-run /path/to/model
+
+# 后台执行（防止 SSH 断连）
+nohup python3 /tmp/upload_lfs.py -f /tmp/dirs.txt -j 12 &
+```
+
+参数：
+- 位置参数：本地目录路径（可多个）
+- `-f / --file`：从文件读取目录列表
+- `-j / --jobs`：并发数（默认 12）
+- `--dry-run`：仅扫描和检查，不实际上传
+
+日志输出到 `/tmp/upload_lfs_YYYYMMDD_HHMMSS.log`。
+
+部署方式：`scp ~/agent/gitlab/upload_lfs.py xa-login:/tmp/upload_lfs.py`
+
+### 5.4 典型工作流
+
+```
+1. 本地执行 check_lfs.py 排查哪些仓库有缺失
+2. 在 xa-login 下载对应模型文件到本地目录
+3. 在 xa-login 执行 upload_lfs.py 将本地文件补充上传到 MinIO
+4. 本地再次 check_lfs.py 验证缺失已修复
+```
+
+## 6. 安全注意事项
 
 - 所有 `mc rm` / `mc rb` / `mc mv` 操作需要**人工确认**后再执行
 - 同步操作（`mc mirror`）在大数据量时注意带宽影响，建议在低峰期执行
