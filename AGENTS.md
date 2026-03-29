@@ -23,11 +23,6 @@ globs: ["**/*"]
 
 ## Part 2: 通用规则（Rules & Guardrails）
 
-### 2.0 全局注意事项（高频易错）
-
-- `kubectl node-shell` 属于 kubectl 插件，`--context` 必须写在 `node-shell` 后面。
-- 正确写法：`kubectl node-shell --context=<别名> <节点IP> [-- <command>]`
-- 错误写法：`kubectl --context=<别名> node-shell ...`（会报 `flags cannot be placed before plugin name`）
 
 ### 2.1 通用偏好（默认遵循）
 
@@ -81,18 +76,19 @@ Kubernetes 集群变更（kubectl）：
 
 ### 3.1 全局执行约束（最高优先级）
 
-1. 所有 `kubectl` 命令必须显式带 `--context=<别名>`（包括 `get/describe/logs/top` 查询命令）。
+1. 所有 `kubectl` 命令必须显式带 `--context <别名>`（包括 `get/describe/logs/top` 查询命令）。
 2. 严禁使用 `kubectl config use-context` / `kubectl config set-context` 修改全局上下文。
 3. 需要命名空间时必须显式带 `-n <namespace>`
 4. 变更类命令（apply/delete/scale/rollout/patch/edit）执行前，必须先输出命令与影响范围并等待确认。
+5. 严禁直接 SSH 到集群节点，必须优先 `kubectl node-shell --context <别名> <节点IP> [-- <command>]`。
+6. 仅当目标节点 `NotReady/Cordon`，才可通过 kubeasz 跳板 SSH 中转。
 
 统一命令模板：
-`kubectl --context=<别名> -n <namespace> <subcommand>`
+`kubectl --context <别名> -n <namespace> <subcommand>`
 
-插件命令例外（`node-shell`）：
-`kubectl node-shell --context=<别名> <节点IP> [-- <command>]`
+node-shell命令例外：
+`kubectl node-shell --context <别名> <节点IP> [-- <command>]`
 
-注意：`kubectl --context=<别名> node-shell ...` 是错误写法（`flags cannot be placed before plugin name`）。
 
 ### 3.2 集群资产（kubectl context 别名）
 
@@ -164,40 +160,40 @@ kubeasz 详细配置、组件更新与节点维护规则见：`/Users/humin/agen
 
 常用查询：
 ```bash
-kubectl --context=<别名> get node -l kubeasz=true -o wide
-kubectl --context=<别名> get node -l ex-lb=true -o wide
-kubectl --context=<别名> get node -l app=ske -o wide
-kubectl --context=<别名> -n kube-system get resourcegroup
-kubectl --context=<别名> get node -l resourceGroup=<resourcegroup>
+kubectl --context <别名> get node -l kubeasz=true -o wide
+kubectl --context <别名> get node -l ex-lb=true -o wide
+kubectl --context <别名> get node -l app=ske -o wide
+kubectl --context <别名> -n kube-system get resourcegroup
+kubectl --context <别名> get node -l resourceGroup=<resourcegroup>
 ```
 
 ResourceGroup 详细规则见：`/Users/humin/agent/k8s-resourcegroup/SKILL.md`
 
 Hostname -> IP：
 ```bash
-kubectl node-shell --context=<别名> <任意节点IP> -- grep <hostname> /etc/hosts
+kubectl node-shell --context <别名> <任意节点IP> -- grep <hostname> /etc/hosts
 ```
 
 ### 3.6 诊断工具与排障模板
 
 高频排障命令：
 ```bash
-kubectl --context=<别名> -n <namespace> get po -o wide
-kubectl --context=<别名> -n <namespace> describe po <pod>
-kubectl --context=<别名> -n <namespace> get events --sort-by=.lastTimestamp | tail -n 30
-kubectl --context=<别名> top node
-kubectl --context=<别名> -n <namespace> top po
-kubectl --context=<别名> -n <namespace> get svc,ep
-kubectl --context=<别名> -n <namespace> get ingress
+kubectl --context <别名> -n <namespace> get po -o wide
+kubectl --context <别名> -n <namespace> describe po <pod>
+kubectl --context <别名> -n <namespace> get events --sort-by=.lastTimestamp | tail -n 30
+kubectl --context <别名> top node
+kubectl --context <别名> -n <namespace> top po
+kubectl --context <别名> -n <namespace> get svc,ep
+kubectl --context <别名> -n <namespace> get ingress
 ```
 
 节点登录规则：
-- 严禁直接 SSH 到集群节点，必须优先 `kubectl node-shell --context=<别名> <节点IP> [-- <command>]`。
+- 严禁直接 SSH 到集群节点，必须优先 `kubectl node-shell --context <别名> <节点IP> [-- <command>]`。
 - 仅当目标节点 `NotReady/Cordon`，才可通过 kubeasz 跳板 SSH 中转。
 
 日志与指标：
 ```bash
-kubectl --context=<别名> -n <namespace> logs <pod> [--previous] [-f] [--tail=100]
+kubectl --context <别名> -n <namespace> logs <pod> [--previous] [-f] [--tail=100]
 uv run ~/k8s/loki.py -h
 uv run ~/k8s/thanos.py -h
 ```
@@ -211,7 +207,7 @@ uv run ~/k8s/thanos.py -h
 
 镜像中转流程：
 ```bash
-kubectl --context=<别名> get node -l kubeasz=true -o wide
+kubectl --context <别名> get node -l kubeasz=true -o wide
 ssh <跳板IP>
 docker pull <外网镜像>:<tag>
 docker tag <外网镜像>:<tag> image.ac.com:5000/k8s/<镜像名>:<tag>
