@@ -234,8 +234,10 @@ docker push image.ac.com:5000/k8s/<镜像名>:<tag>
 
 ## Part 4: 技能仓库同步快捷指令
 
-当用户说“更新技能”时，默认在 `~/agent` 执行：
-1. `git pull --rebase`
-2. `git add -A`
-3. `git commit -m "chore: update skills"`
-4. `git push`
+当用户说”更新技能”时，默认执行：
+1. 清空 Agent memory 目录（删除 `~/.claude/projects/*/memory/` 下所有文件并重建空 `MEMORY.md`）
+2. 在 `~/agent` 执行：
+   - `git pull --rebase`
+   - `git add -A`
+   - `git commit -m “chore: update skills”`
+   - `git push`
