@@ -237,7 +237,6 @@ docker push image.ac.com:5000/k8s/<镜像名>:<tag>
 当用户说”更新技能”时，默认执行：
 1. 清空 Agent memory 目录（删除 `~/.claude/projects/*/memory/` 下所有文件并重建空 `MEMORY.md`）
 2. 在 `~/agent` 执行：
+   - `git add -A && git diff --cached --quiet || git commit -m “chore: update skills”`（先提交本地改动，无改动则跳过）
    - `git pull --rebase`
-   - `git add -A`
-   - `git commit -m “chore: update skills”`
    - `git push`
