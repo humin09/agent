@@ -155,7 +155,9 @@ def match(repos: list[str], dirs: list[str], threshold: float) -> list[dict]:
     return results, unmatched_dirs
 
 
-def generate_report(results: list[dict], unmatched_dirs: list[dict], threshold: float) -> str:
+def generate_report(
+    results: list[dict], unmatched_dirs: list[dict], threshold: float
+) -> str:
     lines = []
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     lines.append(f"# LFS 仓库-目录匹配报告")
@@ -164,20 +166,16 @@ def generate_report(results: list[dict], unmatched_dirs: list[dict], threshold: 
     lines.append(f"匹配阈值: {threshold}")
     lines.append(f"")
 
-    # 匹配结果表
+    # 匹配结果
     matched = [r for r in results if r["dir"]]
     unmatched_repos = [r for r in results if not r["dir"]]
 
-    lines.append(f"## 匹配结果 ({len(matched)}/{len(results)})")
+    lines.append(f"## 匹配成功 ({len(matched)})")
     lines.append(f"")
-    lines.append(f"| 仓库关键字 | 目录关键字 | 相似度 | 仓库 URL | 目录路径 |")
-    lines.append(f"|-----------|-----------|--------|---------|---------|")
-    for r in sorted(results, key=lambda x: x["score"], reverse=True):
-        repo_kw = r["repo_keyword"]
-        dir_kw = r["dir_keyword"] if r["dir_keyword"] else "-"
-        score = f"{r['score']:.2f}" if r["score"] > 0 else "-"
-        dir_path = r["dir"] if r["dir"] else "-"
-        lines.append(f"| {repo_kw} | {dir_kw} | {score} | {r['repo']} | {dir_path} |")
+    lines.append(f"| 仓库 URL | 目录路径 |")
+    lines.append(f"|---------|---------|")
+    for r in sorted(matched, key=lambda x: x["score"], reverse=True):
+        lines.append(f"| {r['repo']} | {r['dir']} |")
     lines.append(f"")
 
     # 未匹配的仓库
@@ -185,7 +183,7 @@ def generate_report(results: list[dict], unmatched_dirs: list[dict], threshold: 
         lines.append(f"## 未匹配的仓库 ({len(unmatched_repos)})")
         lines.append(f"")
         for r in unmatched_repos:
-            lines.append(f"- `{r['repo_keyword']}` — {r['repo']}")
+            lines.append(f"- {r['repo']}")
         lines.append(f"")
 
     # 未匹配的目录
@@ -193,7 +191,7 @@ def generate_report(results: list[dict], unmatched_dirs: list[dict], threshold: 
         lines.append(f"## 未匹配的目录 ({len(unmatched_dirs)})")
         lines.append(f"")
         for d in unmatched_dirs:
-            lines.append(f"- `{d['dir_keyword']}` — {d['dir']}")
+            lines.append(f"- {d['dir']}")
         lines.append(f"")
 
     return "\n".join(lines)
@@ -205,12 +203,20 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
-    parser.add_argument("--repo", action="append", default=[], help="GitLab 仓库 URL（可多次指定）")
+    parser.add_argument(
+        "--repo", action="append", default=[], help="GitLab 仓库 URL（可多次指定）"
+    )
     parser.add_argument("-r", "--repo-file", help="从文件读取仓库 URL 列表")
-    parser.add_argument("--dir", action="append", default=[], help="本地目录路径（可多次指定）")
+    parser.add_argument(
+        "--dir", action="append", default=[], help="本地目录路径（可多次指定）"
+    )
     parser.add_argument("-d", "--dir-file", help="从文件读取目录路径列表")
-    parser.add_argument("-t", "--threshold", type=float, default=0.4, help="匹配阈值 (0~1，默认 0.4)")
-    parser.add_argument("-o", "--output", help="输出 markdown 文件路径（默认输出到 stdout）")
+    parser.add_argument(
+        "-t", "--threshold", type=float, default=0.4, help="匹配阈值 (0~1，默认 0.4)"
+    )
+    parser.add_argument(
+        "-o", "--output", help="输出 markdown 文件路径（默认输出到 stdout）"
+    )
     args = parser.parse_args()
 
     repos = list(args.repo)

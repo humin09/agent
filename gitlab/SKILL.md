@@ -209,7 +209,7 @@ GitLab 部分仓库的 LFS 指针映射的 object 在 MinIO (`gitlab-lfs-prod`) 
 
 ### 5.2 check_lfs.py — 排查仓库 LFS object 缺失
 
-浅克隆指定仓库（`GIT_LFS_SKIP_SMUDGE=1`），遍历工作区中符合 LFS 后缀的文件，解析 LFS 指针获取 OID，用 `mc stat` 检查 object 是否存在。
+混合策略：先用 GitLab API 快速获取并检查第一个 LFS 指针。如果第一个 object 缺失，直接标记为仓库缺失（跳过 clone）；如果第一个存在，再浅克隆仓库（`GIT_LFS_SKIP_SMUDGE=1`）详细检查全部 LFS 指针。
 
 ```bash
 # 直接传仓库 URL

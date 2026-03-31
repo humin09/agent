@@ -1,21 +1,7 @@
 #!/usr/bin/env python3
 """
-排查 GitLab 仓库 LFS 指针对应 object 是否存在于 MinIO。
-
-背景：GitLab 部分仓库的 LFS 指针映射的 object 在 MinIO 中丢失，
-     导致 git clone / git lfs pull 失败。本脚本浅克隆仓库后提取
-     LFS 指针，逐一检查对应 object 是否存在于 MinIO。
-
-用法:
-  # 直接传仓库 URL
-  python3 check_lfs.py \\
-    https://gitlab.scnet.cn:9002/model/sugon_scnet/DeepSeek-V3.2.git \\
-    https://gitlab.scnet.cn:9002/model/sugon_scnet/Wan2.2-Animate-14B.git
-
-  # 从文件读取仓库列表（每行一个 URL，# 开头为注释）
-  python3 check_lfs.py -f repos.txt
-
-执行环境: 本地（需要 mc 已配置 xaminio 别名）
+混合策略：先用 API 快速检查第一个 LFS 指针，
+如果第一个缺失直接标记；如果第一个存在再 clone 检查全部！
 """
 
 import argparse
@@ -26,20 +12,50 @@ import subprocess
 import sys
 import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
+import requests
+
+requests.packages.urllib3.disable_warnings()
 
 MINIO_ALIAS = "xaminio"
 BUCKET = "gitlab-lfs-prod"
 MC = os.environ.get("MC", "mc")
 
+GITLAB_URL = "https://gitlab.scnet.cn:9002"
 GITLAB_USER = os.environ.get("GITLAB_USER", "root")
 GITLAB_PASS = os.environ.get("GITLAB_PASS", "SugonHpc2024_pro")
 
 LFS_EXTENSIONS = {
-    ".safetensors", ".bin", ".pt", ".pth", ".ckpt", ".h5", ".onnx", ".pb",
-    ".tflite", ".mlmodel", ".model", ".ot", ".ftz", ".gguf",
-    ".pkl", ".joblib", ".msgpack", ".npy", ".npz", ".arrow", ".parquet",
-    ".7z", ".bz2", ".gz", ".rar", ".tar", ".tgz", ".xz", ".zip", ".zst",
+    ".safetensors",
+    ".bin",
+    ".pt",
+    ".pth",
+    ".ckpt",
+    ".h5",
+    ".onnx",
+    ".pb",
+    ".tflite",
+    ".mlmodel",
+    ".model",
+    ".ot",
+    ".ftz",
+    ".gguf",
+    ".pkl",
+    ".joblib",
+    ".msgpack",
+    ".npy",
+    ".npz",
+    ".arrow",
+    ".parquet",
+    ".7z",
+    ".bz2",
+    ".gz",
+    ".rar",
+    ".tar",
+    ".tgz",
+    ".xz",
+    ".zip",
+    ".zst",
 }
 
 LFS_POINTER_RE = re.compile(
@@ -58,7 +74,8 @@ def check_oid_exists(oid: str) -> bool:
     try:
         r = subprocess.run(
             [MC, "stat", oid_to_minio_path(oid)],
-            capture_output=True, timeout=30,
+            capture_output=True,
+            timeout=30,
         )
         return r.returncode == 0
     except subprocess.TimeoutExpired:
@@ -80,15 +97,89 @@ def fmt_size(size_bytes: int) -> str:
 
 
 def inject_credentials(url: str) -> str:
-    return url.replace("https://", f"https://{quote(GITLAB_USER)}:{quote(GITLAB_PASS)}@")
+    return url.replace(
+        "https://", f"https://{quote(GITLAB_USER)}:{quote(GITLAB_PASS)}@"
+    )
 
 
-def repo_name(url: str) -> str:
-    return url.rstrip("/").rstrip(".git").rsplit("/", 1)[-1]
+def get_project_id(repo_url: str) -> str:
+    path = repo_url.rstrip("/").rstrip(".git")
+    parsed = urlparse(path)
+    project_path = parsed.path.lstrip("/")
+    return quote(project_path, safe="")
 
 
-def extract_lfs_pointers(clone_dir: str) -> list[tuple[str, str, int]]:
-    """遍历克隆目录，提取 LFS 指针: [(相对路径, oid, size), ...]"""
+def list_repo_files(project_id: str, ref="main", path="") -> list:
+    files = []
+    url = f"{GITLAB_URL}/api/v4/projects/{project_id}/repository/tree"
+    params = {"ref": ref, "path": path, "per_page": 100, "recursive": True}
+
+    try:
+        r = requests.get(
+            url,
+            params=params,
+            auth=(GITLAB_USER, GITLAB_PASS),
+            verify=False,
+            timeout=60,
+        )
+        r.raise_for_status()
+        items = r.json()
+
+        for item in items:
+            if item["type"] == "blob":
+                files.append(item["path"])
+
+    except Exception:
+        pass
+
+    return files
+
+
+def get_file_content(project_id: str, file_path: str, ref="main") -> str:
+    url = f"{GITLAB_URL}/api/v4/projects/{project_id}/repository/files/{quote(file_path, safe='')}/raw"
+    params = {"ref": ref}
+
+    try:
+        r = requests.get(
+            url,
+            params=params,
+            auth=(GITLAB_USER, GITLAB_PASS),
+            verify=False,
+            timeout=60,
+        )
+        if r.status_code == 200:
+            return r.text
+    except Exception:
+        pass
+    return ""
+
+
+def get_first_lfs_pointer_api(project_id: str) -> tuple[str, str, int] | None:
+    """通过 API 快速获取第一个 LFS 指针"""
+    for ref in ["main", "master"]:
+        files = list_repo_files(project_id, ref=ref)
+        if files:
+            break
+
+    if not files:
+        return None
+
+    lfs_files = [f for f in files if has_lfs_extension(f)]
+    if not lfs_files:
+        return None
+
+    for file_path in lfs_files:
+        content = get_file_content(project_id, file_path, ref=ref)
+        if content:
+            m = LFS_POINTER_RE.match(content)
+            if m:
+                return (file_path, m.group(1), int(m.group(2)))
+
+    return None
+
+
+def extract_lfs_pointers_clone(clone_dir: str) -> list[tuple[str, str, int]]:
+    """clone 后提取所有 LFS 指针"""
     pointers = []
     for root, _, files in os.walk(clone_dir):
         for fname in files:
@@ -109,6 +200,10 @@ def extract_lfs_pointers(clone_dir: str) -> list[tuple[str, str, int]]:
     return pointers
 
 
+def repo_name(url: str) -> str:
+    return url.rstrip("/").rstrip(".git").rsplit("/", 1)[-1]
+
+
 def read_list_from_file(filepath: str) -> list[str]:
     items = []
     with open(filepath) as f:
@@ -121,13 +216,13 @@ def read_list_from_file(filepath: str) -> list[str]:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="排查 GitLab 仓库 LFS object 缺失",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=__doc__,
+        description="混合策略：API 快速预检 + clone 详细检查",
     )
     parser.add_argument("repos", nargs="*", help="GitLab 仓库 URL 列表")
     parser.add_argument("-f", "--file", help="从文件读取仓库 URL（每行一个）")
-    parser.add_argument("-j", "--jobs", type=int, default=16, help="mc stat 并发数（默认 16）")
+    parser.add_argument(
+        "-j", "--jobs", type=int, default=16, help="mc stat 并发数（默认 16）"
+    )
     args = parser.parse_args()
 
     repos = list(args.repos)
@@ -145,38 +240,78 @@ def main():
         print(f"排查: {name}")
         print(f"{'=' * 60}")
 
-        tmpdir = tempfile.mkdtemp(prefix=f"lfs_{name}_")
-        clone_url = inject_credentials(url if url.endswith(".git") else url + ".git")
-
         try:
+            project_id = get_project_id(url)
+
+            # 步骤 1：API 快速拿第一个 LFS 指针
+            print("  [1/3] API 快速预检...")
+            first_pointer = get_first_lfs_pointer_api(project_id)
+
+            if not first_pointer:
+                print("  无 LFS 文件")
+                all_results[name] = {"total": 0, "exists": 0, "missing": []}
+                continue
+
+            first_filename, first_oid, first_size = first_pointer
+            print(f"  第一个 LFS 文件: {first_filename} ({first_oid[:12]}...)")
+
+            # 步骤 2：检查第一个指针是否存在
+            print("  [2/3] 检查第一个 object...")
+            first_exists = check_oid_exists(first_oid)
+
+            if not first_exists:
+                print("  第一个 object 缺失 → 直接标记为全部缺失（跳过 clone）")
+                all_results[name] = {
+                    "total": 1,
+                    "exists": 0,
+                    "missing": [(first_oid, first_filename, first_size)],
+                    "skipped_clone": True,
+                }
+                continue
+
+            print("  第一个 object 存在 → 继续 clone 检查全部")
+
+            # 步骤 3：clone 仓库详细检查全部
+            print("  [3/3] Clone 仓库详细检查...")
+            tmpdir = tempfile.mkdtemp(prefix=f"lfs_{name}_")
+            clone_url = inject_credentials(
+                url if url.endswith(".git") else url + ".git"
+            )
+
             env = os.environ.copy()
             env["GIT_LFS_SKIP_SMUDGE"] = "1"
-            print("  克隆中...")
             subprocess.run(
                 ["git", "clone", "--depth", "1", clone_url, tmpdir + "/repo"],
-                capture_output=True, timeout=600, env=env,
+                capture_output=True,
+                timeout=600,
+                env=env,
             )
             clone_path = tmpdir + "/repo"
 
-            pointers = extract_lfs_pointers(clone_path)
+            pointers = extract_lfs_pointers_clone(clone_path)
             print(f"  找到 {len(pointers)} 个 LFS 指针")
 
             if not pointers:
                 all_results[name] = {"total": 0, "exists": 0, "missing": []}
+                shutil.rmtree(tmpdir, ignore_errors=True)
                 continue
 
             missing = []
             results = {}
             with ThreadPoolExecutor(max_workers=args.jobs) as pool:
-                futures = {pool.submit(check_oid_exists, oid): (filename, oid, size)
-                           for filename, oid, size in pointers}
+                futures = {
+                    pool.submit(check_oid_exists, oid): (filename, oid, size)
+                    for filename, oid, size in pointers
+                }
                 for fut in as_completed(futures):
                     filename, oid, size = futures[fut]
                     results[(filename, oid, size)] = fut.result()
             for i, (filename, oid, size) in enumerate(pointers, 1):
                 exists = results[(filename, oid, size)]
                 mark = "OK" if exists else "MISS"
-                print(f"  [{i}/{len(pointers)}] {mark} {filename} ({oid[:12]}...) {fmt_size(size)}")
+                print(
+                    f"  [{i}/{len(pointers)}] {mark} {filename} ({oid[:12]}...) {fmt_size(size)}"
+                )
                 if not exists:
                     missing.append((oid, filename, size))
 
@@ -185,14 +320,20 @@ def main():
                 "exists": len(pointers) - len(missing),
                 "missing": missing,
             }
-        except subprocess.TimeoutExpired:
-            print("  克隆超时!")
-            all_results[name] = {"total": 0, "exists": 0, "missing": [], "error": "clone timeout"}
+
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
         except Exception as e:
             print(f"  错误: {e}")
-            all_results[name] = {"total": 0, "exists": 0, "missing": [], "error": str(e)}
-        finally:
-            shutil.rmtree(tmpdir, ignore_errors=True)
+            import traceback
+
+            traceback.print_exc()
+            all_results[name] = {
+                "total": 0,
+                "exists": 0,
+                "missing": [],
+                "error": str(e),
+            }
 
     # 汇总
     print(f"\n\n{'=' * 70}")
@@ -213,6 +354,8 @@ def main():
         miss = len(r["missing"])
         total_missing_all += miss
         status = "COMPLETE" if miss == 0 else "INCOMPLETE"
+        if r.get("skipped_clone"):
+            status += " (SKIPPED CLONE)"
         print(f"{name:<45} {total:>8} {exists:>6} {miss:>6}  {status}")
 
     # 缺失明细
