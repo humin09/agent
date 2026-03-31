@@ -30,8 +30,8 @@ targets: ["*"]
 
 常用命令：
 ```bash
-kubectl --context=<别名> get node -l ex-lb=true -o wide
-kubectl node-shell --context=<别名> <ex-lb节点IP>
+kubectl --context <别名> get node -l ex-lb=true -o wide
+kubectl node-shell --context <别名> <ex-lb节点IP>
 systemctl status ex-lb
 ls /etc/ex-lb/conf/
 ```

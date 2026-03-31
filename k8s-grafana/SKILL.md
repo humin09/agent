@@ -49,20 +49,11 @@ curl -sk -u admin:prom-sugon -X POST 'https://grafana.ksai.scnet.cn:58043/api/da
 3. 涉及指标语义变更时，联动 Thanos 校验。
 4. 不在 Skill 中保存明文口令。
 
-## AI 面板索引更新（必须产出）
-每次改动后，更新一份面板索引文档（Markdown）：
-- 文件名建议：`ai-panels-index.md`（或 `ai-<dashboard_uid>-panel-index.md`）
-- 至少包含字段：`dashboard_uid`、`folder`、`title`、`panel_id`、`panel_title`、`panel_type`、`gridPos(x,y,w,h)`
-- 索引只收录 `ai` 文件夹下的面板
 
-建议表头：
-`| panel_id | title | type | pos |`
 
 ## 标准流程
 定位（uid + folder=ai） -> 判断 CM/API-only -> 备份 -> 修改 -> 更新索引 -> 回归验证
 
 协作：指标核验加载 `/Users/humin/agent/k8s-thanos/SKILL.md`。
 
-## 面板索引文件
 
-- maas: `/Users/humin/agent/k8s-grafana/ai-maas-panel-index.md`
