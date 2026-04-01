@@ -41,6 +41,7 @@ LFS_EXTENSIONS = {
     ".ftz",
     ".gguf",
     ".pkl",
+    ".pickle",
     ".joblib",
     ".msgpack",
     ".npy",
@@ -56,6 +57,7 @@ LFS_EXTENSIONS = {
     ".xz",
     ".zip",
     ".zst",
+    ".wasm",
 }
 
 LFS_POINTER_RE = re.compile(
@@ -103,7 +105,9 @@ def inject_credentials(url: str) -> str:
 
 
 def get_project_id(repo_url: str) -> str:
-    path = repo_url.rstrip("/").rstrip(".git")
+    path = repo_url.rstrip("/")
+    if path.endswith(".git"):
+        path = path[:-4]
     parsed = urlparse(path)
     project_path = parsed.path.lstrip("/")
     return quote(project_path, safe="")
@@ -201,7 +205,10 @@ def extract_lfs_pointers_clone(clone_dir: str) -> list[tuple[str, str, int]]:
 
 
 def repo_name(url: str) -> str:
-    return url.rstrip("/").rstrip(".git").rsplit("/", 1)[-1]
+    path = url.rstrip("/")
+    if path.endswith(".git"):
+        path = path[:-4]
+    return path.rsplit("/", 1)[-1]
 
 
 def read_list_from_file(filepath: str) -> list[str]:

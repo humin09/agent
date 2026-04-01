@@ -35,10 +35,38 @@ BUCKET = "gitlab-lfs-prod"
 MC = os.path.expanduser("~/mc")
 
 LFS_EXTENSIONS = {
-    ".safetensors", ".bin", ".pt", ".pth", ".ckpt", ".h5", ".onnx", ".pb",
-    ".tflite", ".mlmodel", ".model", ".ot", ".ftz", ".gguf",
-    ".pkl", ".joblib", ".msgpack", ".npy", ".npz", ".arrow", ".parquet",
-    ".7z", ".bz2", ".gz", ".rar", ".tar", ".tgz", ".xz", ".zip", ".zst",
+    ".safetensors",
+    ".bin",
+    ".pt",
+    ".pth",
+    ".ckpt",
+    ".h5",
+    ".onnx",
+    ".pb",
+    ".tflite",
+    ".mlmodel",
+    ".model",
+    ".ot",
+    ".ftz",
+    ".gguf",
+    ".pkl",
+    ".joblib",
+    ".msgpack",
+    ".npy",
+    ".npz",
+    ".arrow",
+    ".parquet",
+    ".7z",
+    ".bz2",
+    ".gz",
+    ".rar",
+    ".tar",
+    ".tgz",
+    ".xz",
+    ".zip",
+    ".zst",
+    ".pickle",
+    ".wasm",
 }
 
 
@@ -50,7 +78,8 @@ def check_oid_exists(oid: str) -> bool:
     try:
         r = subprocess.run(
             [MC, "stat", oid_to_minio_path(oid)],
-            capture_output=True, timeout=30,
+            capture_output=True,
+            timeout=30,
         )
         return r.returncode == 0
     except subprocess.TimeoutExpired:
@@ -111,7 +140,8 @@ def upload_one_file(filepath: str, dry_run: bool) -> dict:
 
         r = subprocess.run(
             [MC, "cp", filepath, minio_path],
-            capture_output=True, timeout=600,
+            capture_output=True,
+            timeout=600,
         )
         result["status"] = "ok" if r.returncode == 0 else "fail"
         if r.returncode != 0:

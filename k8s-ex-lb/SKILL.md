@@ -46,3 +46,15 @@ ls /etc/ex-lb/conf/
 - 目标集群与目标节点
 - 变更文件与变更点
 - 影响范围与回滚方式
+
+执行后必须同步文件到/Users/humin/sugon/ske-chart/ex-lb
+命名方式为:
+1.如果各个集群配置是一样的只用保留一份conf文件
+2.如果各个集群配置是不一样的那么用集群的别名作为名字最后部分, 比如 
+   昆山: ex-lb-ks.conf
+   青岛: ex-lb-qd.conf
+   深圳: ex-lb-sz.conf
+   郑州: ex-lb-zz.conf
+   武汉: ex-lb-wh.conf
+   达州: ex-lb-dz.conf
+   魏桥: ex-lb-wq.conf
