@@ -1,16 +1,20 @@
 ---
 name: maas
-description: "Maas 模型 可用性探测（基于探测结果拼接可访问推理地址）"
+description: "Maas(model as a service) 模型服务部署"
 targets: ["*"]
 ---
 
 # Maas 模型 URL 生成与探测
 
-本 Skill 用于基于校验ske-model在昆山和郑州的部署和服务可用的检查 `生成可访问的模型推理 URL（`host:58000`）。
+本 Skill 用于ske-model在昆山和郑州的部署的维护
+1. 如果有ske-model的服务变更(replica数量调整除外), 你会把昆山和郑州的deployment和ingress的yaml同步到~/Users/humin/sugon/ske-chart/ske-model/ks和~/Users/humin/sugon/ske-chart/ske-model/zz
+2. 如果有ske-model的服务变更,你会重新生成服务的可探测url, url生成规则见下面章节.
+3. 如果用户说检查服务, 你会查看各个deployment是否都达到预期的副本数, 以及基于可探测url校验服务是否可用.
 
 
 
-## 规则
+
+## url生成规则
 1. 仅将 `post_status=200` 的条目视为“当前可访问”。
 2. URL 统一拼接为：`http://<host>:58000<path>`。
 3. 获取模型信息的路径为: `http://<host>:58000/model`。
@@ -57,5 +61,6 @@ curl -X POST 'http://<host>:58000/v1/images/generations' \
 ```
 2. 检查deployment的replica
 3. 检查服务异常的时候, 找到对应的pod分析日志.
+ 
 
 
