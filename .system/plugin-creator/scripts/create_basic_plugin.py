@@ -191,10 +191,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--path",
         default=str(DEFAULT_PLUGIN_PARENT),
-        help=(
-            "Parent directory for plugin creation (defaults to <cwd>/plugins). "
-            "When using a home-rooted marketplace, use <home>/plugins."
-        ),
+        help="Parent directory for plugin creation (defaults to <cwd>/plugins)",
     )
     parser.add_argument("--with-skills", action="store_true", help="Create skills/ directory")
     parser.add_argument("--with-hooks", action="store_true", help="Create hooks/ directory")
@@ -205,19 +202,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--with-marketplace",
         action="store_true",
-        help=(
-            "Create or update <cwd>/.agents/plugins/marketplace.json. "
-            "Marketplace entries always point to ./plugins/<plugin-name> relative to the "
-            "marketplace root."
-        ),
+        help="Create or update <cwd>/.agents/plugins/marketplace.json",
     )
     parser.add_argument(
         "--marketplace-path",
         default=str(DEFAULT_MARKETPLACE_PATH),
-        help=(
-            "Path to marketplace.json (defaults to <cwd>/.agents/plugins/marketplace.json). "
-            "For a home-rooted marketplace, use <home>/.agents/plugins/marketplace.json."
-        ),
+        help="Path to marketplace.json (defaults to <cwd>/.agents/plugins/marketplace.json)",
     )
     parser.add_argument(
         "--install-policy",

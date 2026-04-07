@@ -10,6 +10,26 @@ targets: ["*"]
 1. 如果有ske-model的服务变更(replica数量调整除外), 你会把昆山和郑州的deployment和ingress的yaml同步到~/Users/humin/sugon/ske-chart/ske-model/ks和~/Users/humin/sugon/ske-chart/ske-model/zz
 2. 如果有ske-model的服务变更,你会重新生成服务的可探测url, url生成规则见下面章节.
 3. 如果用户说检查服务, 你会查看各个deployment是否都达到预期的副本数, 以及基于可探测url校验服务是否可用.
+4. 如果用户说更新可用模型列表, 你会运行 probe_models.py 脚本来生成 available_models.md 报告.
+
+## 工具脚本
+
+### probe_models.py
+用于自动探测 ske-model 命名空间下的可用模型并生成 markdown 报告。
+
+**使用方法：**
+```bash
+uv run /Users/humin/.config/opencode/skills/maas/probe_models.py
+```
+
+**功能：**
+- 自动发现昆山(ks)和郑州(zz)集群的 ske-model 命名空间下的 deployment
+- 通过 ingress -> service -> deployment 的匹配关系找到正确的访问 host
+- 从本地通过 ingress 访问 `/v1/models` 端点获取模型信息
+- 生成包含验证过的 curl 命令的 markdown 报告
+
+**输出文件：**
+- `/Users/humin/.config/opencode/skills/maas/available_models.md` - 可用模型列表报告
 
 
 
@@ -17,18 +37,24 @@ targets: ["*"]
 ## url生成规则
 1. 仅将 `post_status=200` 的条目视为“当前可访问”。
 2. URL 统一拼接为：`http://<host>:58000<path>`。
-3. 获取模型信息的路径为: `http://<host>:58000/model`。
-3. `path=/v1/chat/completions` 时使用 chat 请求体（`messages`）。
-4. `path=/v1/embeddings` 时使用 embedding 请求体（`input`）。
-5. `path=/v1/images/generations` 时使用 image 请求体（`prompt`）。
-6. ingress(host)和deployment, svc的命名映射规则基本都是host=deployment=svc
+3. 获取模型信息的路径为: `/v1/models`。
+4. `path=/v1/chat/completions` 时使用 chat 请求体（`messages`）。
+5. `path=/v1/embeddings` 时使用 embedding 请求体（`input`）。
+6. `path=/v1/images/generations` 时使用 image 请求体（`prompt`）。
+7. ingress(host)通过 service selector 匹配到 deployment，并非简单的 host=deployment=svc
+
+## 获取模型信息的方法
+从本地通过 ingress 访问：
+```bash
+curl -s http://<deployment-name>.<domain-suffix>:58000/v1/models
+```
 
 
 ## 使用场景
-1. 检查服务的可用性, 需要生成curl请求, 本地可拿到200的响应.
+1. 检查服务的可用性, 从本地通过 ingress 访问：
 ### Chat
 ```bash
-curl -X POST 'http://<host>:58000/v1/chat/completions' \
+curl -X POST 'http://<deployment-name>.<domain-suffix>:58000/v1/chat/completions' \
   -H 'Content-Type: application/json' \
   -d '{
     "model": "<model>",
@@ -42,7 +68,7 @@ curl -X POST 'http://<host>:58000/v1/chat/completions' \
 
 ### Embeddings
 ```bash
-curl -X POST 'http://<host>:58000/v1/embeddings' \
+curl -X POST 'http://<deployment-name>.<domain-suffix>:58000/v1/embeddings' \
   -H 'Content-Type: application/json' \
   -d '{
     "model": "<model>",
@@ -52,7 +78,7 @@ curl -X POST 'http://<host>:58000/v1/embeddings' \
 
 ### Images
 ```bash
-curl -X POST 'http://<host>:58000/v1/images/generations' \
+curl -X POST 'http://<deployment-name>.<domain-suffix>:58000/v1/images/generations' \
   -H 'Content-Type: application/json' \
   -d '{
     "model": "<model>",
