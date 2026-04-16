@@ -200,12 +200,15 @@ curl -k --header "PRIVATE-TOKEN: $TOKEN" \
 
 ### 5.1 背景
 
-GitLab 部分仓库的 LFS 指针映射的 object 在 MinIO (`gitlab-lfs-prod`) 中丢失，导致 `git clone` / `git lfs pull` 失败。拆分为两个独立脚本：
+GitLab 部分仓库的 LFS 指针映射的 object 在 MinIO (`gitlab-lfs-prod`) 中丢失，导致 `git clone` / `git lfs pull` 失败。提供以下工具脚本：
 
 | 脚本 | 位置 | 执行环境 | 功能 |
 |------|------|----------|------|
-| `check_lfs.py` | `~/agent/gitlab/check_lfs.py` | 本地 | 排查仓库 LFS object 缺失 |
-| `upload_lfs.py` | xa-login:`/tmp/upload_lfs.py` | xa-login | 上传本地文件补充 LFS object |
+| `check_lfs.py` | `~/agent/gitlab/check_lfs.py` | 本地 | 排查 GitLab 仓库 LFS object 缺失 |
+| `upload_lfs.py` | xa-login:`/tmp/upload_lfs.py` | xa-login | 上传本地文件补充 LFS object 到 MinIO |
+| `scan_lfs_oid.py` | `~/agent/gitlab/scan_lfs_oid.py` | 本地/xa-login | 扫描本地目录计算 LFS 文件 OID，生成 OID->path 映射 |
+| `report_oid_status.py` | `~/agent/gitlab/report_oid_status.py` | 本地/xa-login | 扫描本地目录+计算 OID+检查 MinIO 存在情况+生成报告 |
+| `lfs_match.py` | `~/agent/gitlab/lfs_match.py` | 本地 | 基于语义相似度匹配 GitLab 仓库与本地目录 |
 
 ### 5.2 check_lfs.py — 排查仓库 LFS object 缺失
 
@@ -259,13 +262,77 @@ nohup python3 /tmp/upload_lfs.py -f /tmp/dirs.txt -j 12 &
 
 部署方式：`scp ~/agent/gitlab/upload_lfs.py xa-login:/tmp/upload_lfs.py`
 
-### 5.4 典型工作流
+### 5.4 scan_lfs_oid.py — 扫描目录计算 LFS OID
+
+扫描本地目录，对符合 LFS 后缀规则的文件计算 sha256 OID，输出 OID 到文件路径的映射 JSON。
+
+```bash
+# 直接传目录
+python3 ~/agent/gitlab/scan_lfs_oid.py /path/to/model1 /path/to/model2 -j 24
+
+# 从文件读取目录列表
+python3 ~/agent/gitlab/scan_lfs_oid.py -f /tmp/all_dirs_full.txt -j 24 -o /tmp/oid_mapping.json
+```
+
+参数：
+- 位置参数：目录路径（可多个）
+- `-f / --dirs-file`：从文件读取目录路径
+- `-j / --jobs`：并发数（默认 24）
+- `-o / --output`：输出 JSON 路径（默认 /tmp/oid_mapping_lfs.json）
+
+### 5.5 report_oid_status.py — 扫描目录并生成 OID 状态报告
+
+扫描本地目录计算 OID，查询 MinIO 中 OID 的存在情况，生成详细报告。
+
+```bash
+# 直接传目录
+python3 ~/agent/gitlab/report_oid_status.py /path/to/model1 /path/to/model2
+
+# 从文件读取目录列表
+python3 ~/agent/gitlab/report_oid_status.py -f /tmp/dirs.txt -o /tmp/oid_report.json
+```
+
+参数：
+- 位置参数：本地目录列表
+- `-f / --file`：从文件读取目录路径
+- `-o / --output`：输出报告文件（默认 /tmp/oid_report.json）
+
+### 5.6 lfs_match.py — 匹配 GitLab 仓库与本地目录
+
+基于名称语义相似度，自动匹配 GitLab 仓库 URL 与本地模型目录，生成 markdown 对照表。
+
+```bash
+# 基本用法
+python3 ~/agent/gitlab/lfs_match.py -r repos.txt -d dirs.txt
+
+# 混合传参
+python3 ~/agent/gitlab/lfs_match.py \
+  -r repos.txt \
+  --repo https://gitlab.scnet.cn:9002/model/sugon_scnet/DeepSeek-V3.2.git \
+  -d dirs.txt \
+  --dir /work/home/openaimodels/ai_community/model/Qwen/Qwen3.5-27B
+
+# 调整阈值并输出到文件
+python3 ~/agent/gitlab/lfs_match.py -r repos.txt -d dirs.txt -t 0.5 -o match_report.md
+```
+
+参数：
+- `--repo`：GitLab 仓库 URL（可多次指定）
+- `-r / --repo-file`：从文件读取仓库 URL 列表
+- `--dir`：本地目录路径（可多次指定）
+- `-d / --dir-file`：从文件读取目录路径列表
+- `-t / --threshold`：匹配阈值 (0~1，默认 0.4)
+- `-o / --output`：输出 markdown 文件路径（默认输出到 stdout）
+
+### 5.7 典型工作流
 
 ```
 1. 本地执行 check_lfs.py 排查哪些仓库有缺失
-2. 在 xa-login 下载对应模型文件到本地目录
-3. 在 xa-login 执行 upload_lfs.py 将本地文件补充上传到 MinIO
-4. 本地再次 check_lfs.py 验证缺失已修复
+2. （可选）使用 lfs_match.py 匹配缺失仓库与本地目录
+3. 在 xa-login 下载对应模型文件到本地目录
+4. （可选）使用 scan_lfs_oid.py 或 report_oid_status.py 检查本地文件 OID
+5. 在 xa-login 执行 upload_lfs.py 将本地文件补充上传到 MinIO
+6. 本地再次 check_lfs.py 验证缺失已修复
 ```
 
 ## 6. 安全注意事项
