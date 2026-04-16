@@ -29,7 +29,7 @@ uv run /Users/humin/.config/opencode/skills/maas/probe_models.py
 - 生成包含验证过的 curl 命令的 markdown 报告
 
 **输出文件：**
-- `/Users/humin/.config/opencode/skills/maas/available_models.md` - 可用模型列表报告
+- `/Users/humin/.config/opencode/skills/maas/probe_models.md` - 模型探测报告
 
 
 

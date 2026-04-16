@@ -98,8 +98,10 @@ class LFSBatchProcessor:
         """检查 OID 是否存在于 MinIO 中"""
         path = f"{self.minio_alias}/gitlab-lfs-prod/{oid[0:2]}/{oid[2:4]}/{oid[4:]}"
         try:
+            cmd = f"{self.mc} stat '{path}'"
             result = subprocess.run(
-                [self.mc, 'stat', path],
+                cmd,
+                shell=True,
                 capture_output=True,
                 timeout=5
             )
@@ -112,8 +114,12 @@ class LFSBatchProcessor:
         """上传文件到 MinIO"""
         dest_path = f"{self.minio_alias}/gitlab-lfs-prod/{oid[0:2]}/{oid[2:4]}/{oid[4:]}"
         try:
+            # 使用shell=False和list参数来避免"Argument list too long"错误
+            # 直接使用绝对路径而不是相对路径
+            cmd = f"{self.mc} cp '{src_file}' '{dest_path}'"
             result = subprocess.run(
-                [self.mc, 'cp', src_file, dest_path],
+                cmd,
+                shell=True,
                 capture_output=True,
                 timeout=300
             )

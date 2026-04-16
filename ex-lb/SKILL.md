@@ -26,14 +26,14 @@ targets: ["*"]
 
 - ex-lb 节点标签：`ex-lb=true`
 - 配置目录：`/etc/ex-lb/conf`
-- 服务管理：`systemctl`（`status` / `reload`）
+- 服务管理：`systemctl status/reload ex-lb`
 
 常用命令：
-```bash
-kubectl --context <别名> get node -l ex-lb=true -o wide
-kubectl node-shell --context <别名> <ex-lb节点IP>
-systemctl status ex-lb
-ls /etc/ex-lb/conf/
+
+- 查询ex-lb的节点: `kubectl --context <别名> get node -l ex-lb=true -o wide`
+- 登录ex-lb的节点: `kubectl node-shell --context <别名> <ex-lb节点IP>`
+- 查看ex-lb服务状态: `systemctl status ex-lb`
+- 查看ex-lb配置文件: `ls /etc/ex-lb/conf/`
 ```
 
 ## 4) 变更约束
@@ -51,10 +51,10 @@ ls /etc/ex-lb/conf/
 命名方式为:
 1.如果各个集群配置是一样的只用保留一份conf文件
 2.如果各个集群配置是不一样的那么用集群的别名作为名字最后部分, 比如 
-   昆山: ex-lb-ks.conf
-   青岛: ex-lb-qd.conf
-   深圳: ex-lb-sz.conf
-   郑州: ex-lb-zz.conf
-   武汉: ex-lb-wh.conf
-   达州: ex-lb-dz.conf
-   魏桥: ex-lb-wq.conf
+ - 昆山: ex-lb-ks.conf
+ - 青岛: ex-lb-qd.conf
+ - 深圳: ex-lb-sz.conf
+ - 郑州: ex-lb-zz.conf
+ - 武汉: ex-lb-wh.conf
+ - 达州: ex-lb-dz.conf
+ - 魏桥: ex-lb-wq.conf

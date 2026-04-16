@@ -1,32 +1,12 @@
 # ske-model 可用模型列表
-生成时间: 2026-04-07 19:55:39
+生成时间: 2026-04-16 09:09:21
 
 ## 昆山 集群
 
 ### deepseek-r1
-- 副本数: 1/1
+- 副本数: 1/0
 - 访问地址: `http://r1-h20.ksai.scnet.cn:58000`
-- 模型信息:
-  - `/opt/model/DeepSeek-R1`
-    - 最大上下文长度: 65536
-
-#### 验证过的 curl 命令:
-**获取模型列表:**
-```bash
-curl -s http://r1-h20.ksai.scnet.cn:58000/v1/models
-```
-
-**Chat Completions 测试:**
-```bash
-curl -X POST 'http://r1-h20.ksai.scnet.cn:58000/v1/chat/completions' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model": "/opt/model/DeepSeek-R1",
-    "messages": [{"role": "user", "content": "你好"}],
-    "temperature": 0.7,
-    "stream": false
-  }'
-```
+- 模型信息: ❌ 无法访问 (HTTP Connection failed)
 
 ### deepseek-r1-distill-llama-70b
 - 副本数: 3/3
@@ -129,7 +109,7 @@ curl -X POST 'http://deepseek-r1-0528-8b.ksai.scnet.cn:58000/v1/chat/completions
 ```
 
 ### qwen3-30b-a3b
-- 副本数: 5/5
+- 副本数: 5/4
 - 访问地址: `http://qwen3-30b-k100.ksai.scnet.cn:58000`
 - 模型信息:
   - `/opt/model/Qwen3-30B-A3B`
@@ -205,7 +185,7 @@ curl -X POST 'http://qwq-32b.ksai.scnet.cn:58000/v1/chat/completions' \
 
 ## 郑州 集群
 
-### deepseek-r1-0528
+### deepseek-r1-0528-1
 - 副本数: 7/7
 - 模型信息: ❌ 无对应 ingress
 
@@ -213,8 +193,16 @@ curl -X POST 'http://qwq-32b.ksai.scnet.cn:58000/v1/chat/completions' \
 - 副本数: 1/1
 - 模型信息: ❌ 无对应 ingress
 
+### deepseek-v32-int8-1
+- 副本数: 0/0
+- 模型信息: ❌ 无对应 ingress
+
+### deepseek-v32-int8-head-1
+- 副本数: 0/0
+- 模型信息: ❌ 无对应 ingress
+
 ### minimax-m25-int8
-- 副本数: 40/40
+- 副本数: 29/28
 - 访问地址: `http://minimax-m25-int8.zzai2.scnet.cn:58000`
 - 模型信息:
   - `/models/MiniMax-M2.5-W8A8`
@@ -239,7 +227,7 @@ curl -X POST 'http://minimax-m25-int8.zzai2.scnet.cn:58000/v1/chat/completions' 
 ```
 
 ### minimax-m25-int8-vip
-- 副本数: 40/40
+- 副本数: 37/37
 - 访问地址: `http://minimax-m25-int8-vip.zzai2.scnet.cn:58000`
 - 模型信息:
   - `/models/MiniMax-M2.5-W8A8`
@@ -289,7 +277,7 @@ curl -X POST 'http://minimax-m25-int8-yy.zzai2.scnet.cn:58000/v1/chat/completion
 ```
 
 ### minimax-m25-internal
-- 副本数: 5/4
+- 副本数: 4/4
 - 访问地址: `http://minimax-m25-internal.zzai2.scnet.cn:58000`
 - 模型信息:
   - `/models/MiniMax-M2.5-W8A8`
@@ -313,8 +301,83 @@ curl -X POST 'http://minimax-m25-internal.zzai2.scnet.cn:58000/v1/chat/completio
   }'
 ```
 
+### minimax-m25-test1
+- 副本数: 1/1
+- 访问地址: `http://minimax-m25-test1.zzai2.scnet.cn:58000`
+- 模型信息:
+  - `/models/MiniMax-M2.5-W8A8`
+    - 最大上下文长度: 196608
+
+#### 验证过的 curl 命令:
+**获取模型列表:**
+```bash
+curl -s http://minimax-m25-test1.zzai2.scnet.cn:58000/v1/models
+```
+
+**Chat Completions 测试:**
+```bash
+curl -X POST 'http://minimax-m25-test1.zzai2.scnet.cn:58000/v1/chat/completions' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "/models/MiniMax-M2.5-W8A8",
+    "messages": [{"role": "user", "content": "你好"}],
+    "temperature": 0.7,
+    "stream": false
+  }'
+```
+
+### minimax-m25-test2
+- 副本数: 1/1
+- 访问地址: `http://minimax-m25-test2.zzai2.scnet.cn:58000`
+- 模型信息:
+  - `/models/MiniMax-M2.5-W8A8`
+    - 最大上下文长度: 196608
+
+#### 验证过的 curl 命令:
+**获取模型列表:**
+```bash
+curl -s http://minimax-m25-test2.zzai2.scnet.cn:58000/v1/models
+```
+
+**Chat Completions 测试:**
+```bash
+curl -X POST 'http://minimax-m25-test2.zzai2.scnet.cn:58000/v1/chat/completions' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "/models/MiniMax-M2.5-W8A8",
+    "messages": [{"role": "user", "content": "你好"}],
+    "temperature": 0.7,
+    "stream": false
+  }'
+```
+
+### minimax-m27-bf16-test
+- 副本数: 1/1
+- 访问地址: `http://minimax-m27-bf16-test.zzai2.scnet.cn:58000`
+- 模型信息:
+  - `/models/MiniMax-M2.7-bf16`
+    - 最大上下文长度: 153600
+
+#### 验证过的 curl 命令:
+**获取模型列表:**
+```bash
+curl -s http://minimax-m27-bf16-test.zzai2.scnet.cn:58000/v1/models
+```
+
+**Chat Completions 测试:**
+```bash
+curl -X POST 'http://minimax-m27-bf16-test.zzai2.scnet.cn:58000/v1/chat/completions' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "/models/MiniMax-M2.7-bf16",
+    "messages": [{"role": "user", "content": "你好"}],
+    "temperature": 0.7,
+    "stream": false
+  }'
+```
+
 ### qwen3-235b-a22b
-- 副本数: 5/5
+- 副本数: 9/9
 - 访问地址: `http://qwen3-235b-a22b.zzai2.scnet.cn:58000`
 - 模型信息:
   - `/data/model/Qwen3-235B-A22B`
@@ -364,7 +427,7 @@ curl -X POST 'http://qwen3-235b-a22b-thinking-2507.zzai2.scnet.cn:58000/v1/chat/
 ```
 
 ### qwen3-30b-a3b-instruct-2507
-- 副本数: 2/2
+- 副本数: 3/3
 - 访问地址: `http://qwen3-30b-a3b-instruct-2507.zzai2.scnet.cn:58000`
 - 模型信息:
   - `/data/models/Qwen3-30B-A3B-Instruct-2507`
@@ -391,4 +454,54 @@ curl -X POST 'http://qwen3-30b-a3b-instruct-2507.zzai2.scnet.cn:58000/v1/chat/co
 ### qwen3-coder-480b-a35b-instruct-head-1
 - 副本数: 1/1
 - 模型信息: ❌ 无对应 ingress
+
+### wan22-ti2v-5b-diffusers
+- 副本数: 1/1
+- 访问地址: `http://wan22-ti2v-5b-diffusers.zzai2.scnet.cn:58000`
+- 模型信息:
+  - `/data/models/Wan2.2-TI2V-5B-Diffusers`
+    - 最大上下文长度: None
+
+#### 验证过的 curl 命令:
+**获取模型列表:**
+```bash
+curl -s http://wan22-ti2v-5b-diffusers.zzai2.scnet.cn:58000/v1/models
+```
+
+**Chat Completions 测试:**
+```bash
+curl -X POST 'http://wan22-ti2v-5b-diffusers.zzai2.scnet.cn:58000/v1/chat/completions' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "/data/models/Wan2.2-TI2V-5B-Diffusers",
+    "messages": [{"role": "user", "content": "你好"}],
+    "temperature": 0.7,
+    "stream": false
+  }'
+```
+
+### z-image-turbo
+- 副本数: 1/1
+- 访问地址: `http://z-image-turbo.zzai2.scnet.cn:58000`
+- 模型信息:
+  - `/data/models/Z-Image-Turbo`
+    - 最大上下文长度: None
+
+#### 验证过的 curl 命令:
+**获取模型列表:**
+```bash
+curl -s http://z-image-turbo.zzai2.scnet.cn:58000/v1/models
+```
+
+**Chat Completions 测试:**
+```bash
+curl -X POST 'http://z-image-turbo.zzai2.scnet.cn:58000/v1/chat/completions' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "/data/models/Z-Image-Turbo",
+    "messages": [{"role": "user", "content": "你好"}],
+    "temperature": 0.7,
+    "stream": false
+  }'
+```
 

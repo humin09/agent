@@ -18,4 +18,7 @@ targets: ["*"]
 - `ssh xa-login "~/mc ls oss_scnet/gitlab-lfs-prod/"`
 - `ssh xa-login "~/mc cp <远程路径> oss_scnet/<桶>/<路径>"`
 
+工具脚本：
+- `minio_bucket_policy.py` - MinIO 桶策略分析与报告工具
+
 高风险约束：`mc rm` / `mc rb` / `mc mv` 必须先确认。
