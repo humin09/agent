@@ -244,3 +244,58 @@ changed 19 packages in 20s
   run `npm fund` for details
 /Users/humin/agent/scripts/daily-upgrade.sh:9: command not found: claude
 
+=== Fri Apr 17 06:13:41 CST 2026 ===
+==> Auto-updating Homebrew...
+Adjust how often this is run with `$HOMEBREW_AUTO_UPDATE_SECS` or disable with
+`$HOMEBREW_NO_AUTO_UPDATE=1`. Hide these hints with `$HOMEBREW_NO_ENV_HINTS=1` (see `man brew`).
+Error: Failed to download https://formulae.brew.sh/api/cask.jws.json!
+==> Auto-updated Homebrew!
+==> Updated Homebrew from 9383212933 to 598ecb7ce3.
+Updated 1 tap (homebrew/cask).
+
+You have 3 outdated formulae installed.
+
+==> Upgrading 3 outdated packages:
+libpng 1.6.57 -> 1.6.58
+uv 0.11.6 -> 0.11.7
+libngtcp2 1.22.0 -> 1.22.1
+==> Fetching downloads for: libpng, uv and libngtcp2
+✔︎ Bottle libpng (1.6.58)
+✔︎ Bottle libngtcp2 (1.22.1)
+✔︎ Bottle uv (0.11.7)
+==> Upgrading libpng
+  1.6.57 -> 1.6.58 
+==> Pouring libpng--1.6.58.arm64_tahoe.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/libpng/1.6.58: 28 files, 1.4MB
+==> Running `brew cleanup libpng`...
+Disable this behaviour by setting `HOMEBREW_NO_INSTALL_CLEANUP=1`.
+Hide these hints with `HOMEBREW_NO_ENV_HINTS=1` (see `man brew`).
+Removing: /opt/homebrew/Cellar/libpng/1.6.57... (28 files, 1.4MB)
+Removing: /Users/humin/Library/Caches/Homebrew/libpng_bottle_manifest--1.6.57... (8.6KB)
+Removing: /Users/humin/Library/Caches/Homebrew/libpng--1.6.57... (459.7KB)
+==> Upgrading uv
+  0.11.6 -> 0.11.7 
+==> Pouring uv--0.11.7.arm64_tahoe.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/uv/0.11.7: 17 files, 48.5MB
+==> Running `brew cleanup uv`...
+Removing: /opt/homebrew/Cellar/uv/0.11.6... (17 files, 48.6MB)
+Removing: /Users/humin/Library/Caches/Homebrew/uv_bottle_manifest--0.11.6... (8.1KB)
+Removing: /Users/humin/Library/Caches/Homebrew/uv--0.11.6... (20.5MB)
+==> Upgrading libngtcp2
+  1.22.0 -> 1.22.1 
+==> Pouring libngtcp2--1.22.1.arm64_tahoe.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/libngtcp2/1.22.1: 21 files, 1.3MB
+==> Running `brew cleanup libngtcp2`...
+Removing: /opt/homebrew/Cellar/libngtcp2/1.22.0... (21 files, 1.4MB)
+Removing: /Users/humin/Library/Caches/Homebrew/libngtcp2_bottle_manifest--1.22.0... (9.7KB)
+Removing: /Users/humin/Library/Caches/Homebrew/libngtcp2--1.22.0... (407.3KB)
+==> Caveats
+zsh completions have been installed to:
+  /opt/homebrew/share/zsh/site-functions
+
+changed 19 packages in 10s
+
+15 packages are looking for funding
+  run `npm fund` for details
+/Users/humin/agent/scripts/daily-upgrade.sh:9: command not found: claude
+
