@@ -1,5 +1,5 @@
 # ske-model 可用模型列表
-生成时间: 2026-04-16 09:09:21
+生成时间: 2026-04-17 17:32:05
 
 ## 昆山 集群
 
@@ -202,7 +202,7 @@ curl -X POST 'http://qwq-32b.ksai.scnet.cn:58000/v1/chat/completions' \
 - 模型信息: ❌ 无对应 ingress
 
 ### minimax-m25-int8
-- 副本数: 29/28
+- 副本数: 25/25
 - 访问地址: `http://minimax-m25-int8.zzai2.scnet.cn:58000`
 - 模型信息:
   - `/models/MiniMax-M2.5-W8A8`
@@ -401,6 +401,11 @@ curl -X POST 'http://qwen3-235b-a22b.zzai2.scnet.cn:58000/v1/chat/completions' \
   }'
 ```
 
+### qwen3-235b-a22b-test
+- 副本数: 1/1
+- 访问地址: `http://qwen3-235b-a22b-test.zzai2.scnet.cn:58000`
+- 模型信息: ❌ 无法访问 (HTTP Connection failed)
+
 ### qwen3-235b-a22b-thinking-2507
 - 副本数: 1/1
 - 访问地址: `http://qwen3-235b-a22b-thinking-2507.zzai2.scnet.cn:58000`
@@ -454,6 +459,31 @@ curl -X POST 'http://qwen3-30b-a3b-instruct-2507.zzai2.scnet.cn:58000/v1/chat/co
 ### qwen3-coder-480b-a35b-instruct-head-1
 - 副本数: 1/1
 - 模型信息: ❌ 无对应 ingress
+
+### qwen36
+- 副本数: 1/1
+- 访问地址: `http://qwen36.zzai2.scnet.cn:58000`
+- 模型信息:
+  - `/public/ai_data/models/Qwen3.6-35B-A3B`
+    - 最大上下文长度: 262144
+
+#### 验证过的 curl 命令:
+**获取模型列表:**
+```bash
+curl -s http://qwen36.zzai2.scnet.cn:58000/v1/models
+```
+
+**Chat Completions 测试:**
+```bash
+curl -X POST 'http://qwen36.zzai2.scnet.cn:58000/v1/chat/completions' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "/public/ai_data/models/Qwen3.6-35B-A3B",
+    "messages": [{"role": "user", "content": "你好"}],
+    "temperature": 0.7,
+    "stream": false
+  }'
+```
 
 ### wan22-ti2v-5b-diffusers
 - 副本数: 1/1

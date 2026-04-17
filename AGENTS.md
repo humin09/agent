@@ -127,6 +127,9 @@ K8s 基础信息（当前基线）：
   - coredns `1.11.1`
   - metrics-server `v0.7.1`
   - kube-scheduler `v1.26.8`
+- 常用测试镜像:
+  - image.ac.com:5000/k8s/library/busybox:1.31.1 最常用默认镜像, cronjob,job首选
+  - image.ac.com:5000/k8s/netshoot 需要网络工具验证
 
 第三方组件（当前基线）：
 - Prometheus: `image.ac.com:5000/k8s/prometheus/prometheus:v2.51.2`

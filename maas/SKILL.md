@@ -31,6 +31,57 @@ uv run /Users/humin/.config/opencode/skills/maas/probe_models.py
 **输出文件：**
 - `/Users/humin/.config/opencode/skills/maas/probe_models.md` - 模型探测报告
 
+### bench_ttft.py
+vLLM 完整压测脚本，支持：
+- 不同输入长度
+- 缓存命中率
+- TTFT（首字延迟）和 E2E（端到端延迟）测量
+
+### maas_test.py
+Maas vLLM 自动化测试脚本，入口脚本，用于：
+- 测试 3 个 `max-num-batched-tokens` × 4 个输入长度 × 3 个缓存命中率 = 36 个组合
+- 会 patch 指定 deployment 的 `--max-num-batched-tokens`，等待 rollout 完成后自动进行压测
+- deployment 和指标命名空间固定为 `ske-model`，不再暴露 namespace 参数
+- 支持显式指定：
+  1. `--context`: 集群别名，默认 `zz`
+  2. `--deployment-name`: 目标 deployment
+  3. `--pods` / `--pod-regex`: 显式传入测试 pod，优先用于 Thanos 指标过滤
+  4. `--batched-tokens`: `max-num-batched-tokens` 值列表
+  5. `--token-lengths`: 输入长度列表
+  6. `--cache-rates`: 缓存命中率列表
+  7. `--concurrency` / `--total-requests`: 每组压测并发和总请求数
+  8. `--metrics-service`: Thanos 中 vLLM 指标的 service 标签，默认等于 deployment 名
+  9. `--thanos-selector` / `--thanos-query`: 自定义 PromQL selector 或整条查询
+  10. `--restore-on-exit`: 压测结束后恢复 deployment 原始参数
+- 从 Thanos 收集指标，默认复用 maas Grafana 面板的 PromQL 口径：
+  - `vllm:num_requests_waiting`
+  - `vllm:num_requests_running`
+  - `vllm:e2e_request_latency_seconds_bucket`
+  - `vllm:time_to_first_token_seconds_bucket`
+  - `vllm:prompt_tokens_total`
+  - `vllm:generation_tokens_total`
+  - `vllm:gpu_prefix_cache_hits_total / queries_total`
+  - `vllm:prefix_cache_hits_total / queries_total`
+  - `vllm:kv_cache_usage_perc`
+- 结果按 JSON 格式统一保存到 `/tmp/maas-benchmark-result.log`
+
+**使用方法：**
+```bash
+uv run /Users/humin/agent/maas/maas_test.py --help
+# 默认测试
+uv run /Users/humin/agent/maas/maas_test.py
+# 郑州集群实际使用建议
+uv run /Users/humin/agent/maas/maas_test.py \
+  --context zz \
+  --deployment-name minimax-m25-int8-yy \
+  --pods <pod1> <pod2> \
+  --metrics-service minimax-m25-int8-yy \
+  --batched-tokens 4096 6144 8192 \
+  --token-lengths 20000 40000 80000 120000 \
+  --cache-rates 0.0 0.4 0.8 \
+  --restore-on-exit
+```
+
 
 
 
@@ -88,5 +139,3 @@ curl -X POST 'http://<deployment-name>.<domain-suffix>:58000/v1/images/generatio
 2. 检查deployment的replica
 3. 检查服务异常的时候, 找到对应的pod分析日志.
  
-
-
