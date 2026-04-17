@@ -87,25 +87,34 @@ uv run /Users/humin/agent/maas/maas_test.py \
 
 ## url生成规则
 1. 仅将 `post_status=200` 的条目视为“当前可访问”。
-2. URL 统一拼接为：`http://<host>:58000<path>`。
+2. 公网 ingress URL 按集群固定拼接：
+   - 郑州集群 `zz`：`http://<host>.zzai2.scnet.cn:58000<path>`
+   - 昆山集群 `ks`：`http://<host>.ksai.scnet.cn:58000<path>`
 3. 获取模型信息的路径为: `/v1/models`。
 4. `path=/v1/chat/completions` 时使用 chat 请求体（`messages`）。
 5. `path=/v1/embeddings` 时使用 embedding 请求体（`input`）。
 6. `path=/v1/images/generations` 时使用 image 请求体（`prompt`）。
-7. ingress(host)通过 service selector 匹配到 deployment，并非简单的 host=deployment=svc
+7. 使用的 ingress 固定为 `maas-ingress`。
+8. ingress(host)通过 service selector 匹配到 deployment，并非简单的 host=deployment=svc。
 
 ## 获取模型信息的方法
 从本地通过 ingress 访问：
 ```bash
-curl -s http://<deployment-name>.<domain-suffix>:58000/v1/models
+curl -s http://<host>.zzai2.scnet.cn:58000/v1/models
+curl -s http://<host>.ksai.scnet.cn:58000/v1/models
 ```
+
+其中：
+- `zz` 集群使用 `http://<host>.zzai2.scnet.cn:58000`
+- `ks` 集群使用 `http://<host>.ksai.scnet.cn:58000`
+- `<host>` 来源于 `maas-ingress` 中与目标 service/deployment 对应的 host
 
 
 ## 使用场景
 1. 检查服务的可用性, 从本地通过 ingress 访问：
 ### Chat
 ```bash
-curl -X POST 'http://<deployment-name>.<domain-suffix>:58000/v1/chat/completions' \
+curl -X POST 'http://<host>.<cluster-domain>:58000/v1/chat/completions' \
   -H 'Content-Type: application/json' \
   -d '{
     "model": "<model>",
@@ -119,7 +128,7 @@ curl -X POST 'http://<deployment-name>.<domain-suffix>:58000/v1/chat/completions
 
 ### Embeddings
 ```bash
-curl -X POST 'http://<deployment-name>.<domain-suffix>:58000/v1/embeddings' \
+curl -X POST 'http://<host>.<cluster-domain>:58000/v1/embeddings' \
   -H 'Content-Type: application/json' \
   -d '{
     "model": "<model>",
@@ -129,7 +138,7 @@ curl -X POST 'http://<deployment-name>.<domain-suffix>:58000/v1/embeddings' \
 
 ### Images
 ```bash
-curl -X POST 'http://<deployment-name>.<domain-suffix>:58000/v1/images/generations' \
+curl -X POST 'http://<host>.<cluster-domain>:58000/v1/images/generations' \
   -H 'Content-Type: application/json' \
   -d '{
     "model": "<model>",
@@ -138,4 +147,9 @@ curl -X POST 'http://<deployment-name>.<domain-suffix>:58000/v1/images/generatio
 ```
 2. 检查deployment的replica
 3. 检查服务异常的时候, 找到对应的pod分析日志.
+4. 常用性能指标以 Grafana 的 `maas` 面板为准；做压测、性能对比或异常分析时，优先参考该面板中的指标口径。
+
+其中 `cluster-domain` 固定取值：
+- 郑州 `zz`：`zzai2.scnet.cn`
+- 昆山 `ks`：`ksai.scnet.cn`
  
