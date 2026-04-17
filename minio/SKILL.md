@@ -49,7 +49,6 @@ targets: ["*"]
 
 - 资源位置：各集群 `ske` 命名空间
 - CronJob 名称：`minio-lfs-sync`
-- YAML 源文件：`~/agent/gitlab/minio-sync-cronjob.yaml`
 - 镜像：`image.ac.com:5000/k8s/library/busybox:1.31.1`
 - 调度：每天凌晨 2 点（`0 2 * * *`）
 - 最大运行时间：20 小时
@@ -76,10 +75,6 @@ kubectl --context <别名> -n ske logs -l job-name --tail=50
 kubectl --context <别名> -n ske apply -f ~/agent/gitlab/minio-sync-cronjob.yaml
 ```
 
-### 3.2 历史方案（已废弃）
-
-`minio-sync.service`：systemd 服务，`mc mirror --watch` 持续同步。已在所有集群 stop + disable。
-问题：`--watch` 依赖事件通知，跨集群不生效，初始同步后不再有增量。
 
 ## 4. 工具脚本
 
