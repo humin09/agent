@@ -31,12 +31,6 @@ uv run /Users/humin/.config/opencode/skills/maas/probe_models.py
 **输出文件：**
 - `/Users/humin/.config/opencode/skills/maas/probe_models.md` - 模型探测报告
 
-### bench_ttft.py
-vLLM 完整压测脚本，支持：
-- 不同输入长度
-- 缓存命中率
-- TTFT（首字延迟）和 E2E（端到端延迟）测量
-
 ### maas_test.py
 Maas vLLM 自动化测试脚本，入口脚本，用于：
 - 测试 3 个 `max-num-batched-tokens` × 4 个输入长度 × 3 个缓存命中率 = 36 个组合

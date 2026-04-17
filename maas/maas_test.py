@@ -8,13 +8,11 @@ It handles four concerns:
 3. Run TTFT/E2E benchmarks for each (token_length, cache_rate) case.
 4. Collect Thanos metrics for the exact benchmark time window.
 
-The script intentionally keeps the request-generation logic close to bench_ttft.py
-so the benchmark behavior stays familiar, but stops relying on parsing stdout.
+The benchmark logic is self-contained so there is only one maintained entry point.
 """
 
 import argparse
 import asyncio
-import importlib.util
 import json
 import random
 import socket
@@ -36,8 +34,16 @@ DEFAULT_TOKEN_LENGTHS = [20000, 40000, 80000, 120000]
 DEFAULT_CACHE_RATES = [0.0, 0.4, 0.8]
 DEFAULT_RESULT_LOG = "/tmp/maas-benchmark-result.log"
 DEFAULT_NAMESPACE = "ske-model"
-BENCH_MODULE_PATH = Path("/Users/humin/agent/maas/bench_ttft.py")
 VLLM_PORT = 8000
+MODEL = "/models/MiniMax-M2.5-W8A8"
+OUTPUT_TOKENS_PER_REQUEST = 16
+CACHE_BASE_TEXTS: Dict[int, str] = {}
+BASE_TEXT_VARIANTS = [
+    "在一个阳光明媚的早晨",
+    "在一个风和日丽的下午",
+    "在一个星空灿烂的夜晚",
+    "在一个细雨蒙蒙的黄昏",
+]
 
 NEW_TEXT_VARIANTS = [
     "在一个风雪交加的冬日",
@@ -68,6 +74,26 @@ class BenchmarkCase:
 
 class CommandError(RuntimeError):
     pass
+
+
+def generate_fixed_input(target_tokens: int, seed: int = 42) -> str:
+    rng = random.Random(seed)
+    units_needed = target_tokens // 40
+    parts = []
+    for _ in range(units_needed):
+        variant = rng.choice(BASE_TEXT_VARIANTS)
+        parts.append(
+            f"{variant}，小明和他的朋友们一起去公园散步。"
+            "他们看到了很多美丽的花朵和高大的树木。"
+        )
+    return "".join(parts)
+
+
+def init_cache_base_texts() -> None:
+    if CACHE_BASE_TEXTS:
+        return
+    for length in DEFAULT_TOKEN_LENGTHS + [26000, 50000]:
+        CACHE_BASE_TEXTS[length] = generate_fixed_input(length, seed=42)
 
 
 def parse_args() -> argparse.Namespace:
@@ -415,22 +441,12 @@ def stop_port_forward(proc: Optional[subprocess.Popen[str]]) -> None:
         proc.kill()
 
 
-def load_bench_module() -> Any:
-    spec = importlib.util.spec_from_file_location("bench_ttft_runtime", BENCH_MODULE_PATH)
-    if spec is None or spec.loader is None:
-        raise CommandError(f"failed to load bench module from {BENCH_MODULE_PATH}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+def generate_case_input(target_tokens: int, cache_rate: float, req_id: int) -> str:
+    init_cache_base_texts()
 
-
-def generate_case_input(module: Any, target_tokens: int, cache_rate: float, req_id: int) -> str:
-    if not getattr(module, "CACHE_BASE_TEXTS", None):
-        module.init_cache_base_texts()
-
-    available_lengths = sorted(module.CACHE_BASE_TEXTS.keys())
+    available_lengths = sorted(CACHE_BASE_TEXTS.keys())
     closest_length = min(available_lengths, key=lambda length: abs(length - target_tokens))
-    base_text = module.CACHE_BASE_TEXTS[closest_length]
+    base_text = CACHE_BASE_TEXTS[closest_length]
 
     cached_tokens = int(target_tokens * cache_rate)
     new_tokens = max(target_tokens - cached_tokens, 0)
@@ -450,15 +466,13 @@ def generate_case_input(module: Any, target_tokens: int, cache_rate: float, req_
 
 
 async def run_single_case(
-    module: Any,
     base_url: str,
     case: BenchmarkCase,
     concurrency: int,
     total_requests: int,
     request_timeout_seconds: int,
 ) -> Dict[str, Any]:
-    module.BASE_URL = base_url
-    module.init_cache_base_texts()
+    import aiohttp
 
     semaphore = asyncio.Semaphore(concurrency)
     sample_results: List[Dict[str, Any]] = []
@@ -469,11 +483,11 @@ async def run_single_case(
         req_id: int,
     ) -> Dict[str, Any]:
         payload = {
-            "model": module.MODEL,
+            "model": MODEL,
             "messages": [
                 {"role": "user", "content": f"请用一句话总结以下内容：\n{input_text}"}
             ],
-            "max_tokens": module.OUTPUT_TOKENS_PER_REQUEST,
+            "max_tokens": OUTPUT_TOKENS_PER_REQUEST,
             "temperature": 0.1,
             "stream": True,
         }
@@ -487,7 +501,7 @@ async def run_single_case(
             async with session.post(
                 base_url,
                 json=payload,
-                timeout=module.aiohttp.ClientTimeout(total=request_timeout_seconds),
+                timeout=aiohttp.ClientTimeout(total=request_timeout_seconds),
             ) as resp:
                 if resp.status != 200:
                     body = await resp.text()
@@ -520,11 +534,11 @@ async def run_single_case(
         return {"req_id": req_id, "ttft": ttft, "e2e": e2e, "error": error}
 
     async def bounded_request(session: Any, req_id: int) -> Dict[str, Any]:
-        prompt = generate_case_input(module, case.token_length, case.cache_rate, req_id)
+        prompt = generate_case_input(case.token_length, case.cache_rate, req_id)
         async with semaphore:
             return await measure_request(session, prompt, req_id)
 
-    async with module.aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession() as session:
         start_monotonic = time.monotonic()
         tasks = [bounded_request(session, req_id) for req_id in range(total_requests)]
         sample_results = await asyncio.gather(*tasks)
@@ -778,7 +792,6 @@ def save_results(result_log: str, payload: Dict[str, Any]) -> None:
 
 
 async def orchestrate(args: argparse.Namespace) -> Dict[str, Any]:
-    bench_module = load_bench_module()
     base_url = f"http://127.0.0.1:{args.port_forward_local_port}/v1/chat/completions"
     metrics_service = args.metrics_service or args.deployment_name
 
@@ -871,7 +884,6 @@ async def orchestrate(args: argparse.Namespace) -> Dict[str, Any]:
                     )
                     case_start = datetime.now()
                     benchmark_summary = await run_single_case(
-                        module=bench_module,
                         base_url=base_url,
                         case=case,
                         concurrency=args.concurrency,
