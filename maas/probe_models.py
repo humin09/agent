@@ -25,12 +25,26 @@ def get_k8s_resources(context, namespace):
     return json.loads(result.stdout)
 
 
-def probe_url(url, timeout=10):
-    try:
-        response = requests.get(url, timeout=timeout)
-        return response
-    except Exception as e:
-        return None
+def probe_url(url, timeout=10, retries=3, retry_interval=2):
+    for attempt in range(retries):
+        try:
+            response = requests.get(url, timeout=timeout)
+            return response
+        except Exception:
+            if attempt < retries - 1:
+                time.sleep(retry_interval)
+    return None
+
+
+def probe_json_post(url, payload, timeout=30, headers=None, retries=3, retry_interval=2):
+    for attempt in range(retries):
+        try:
+            response = requests.post(url, json=payload, timeout=timeout, headers=headers)
+            return response
+        except Exception:
+            if attempt < retries - 1:
+                time.sleep(retry_interval)
+    return None
 
 
 def generate_markdown(clusters_data):
@@ -58,19 +72,53 @@ def generate_markdown(clusters_data):
                 if model_response and model_response.status_code == 200:
                     try:
                         model_data = model_response.json()
+                        models = model_data.get("data", [])
+                        first_model = models[0].get("id", "") if models else ""
+
                         md += f"- 模型信息:\n"
-                        for model in model_data.get("data", []):
+                        for model in models:
                             model_id = model["id"]
                             md += f"  - `{model_id}`\n"
                             md += f"    - 最大上下文长度: {model.get('max_model_len', 'N/A')}\n"
 
+                        anthropic_supported = False
+                        anthropic_status = "未探测"
+                        if first_model:
+                            anthropic_payload = {
+                                "model": first_model,
+                                "max_tokens": 1,
+                                "messages": [{"role": "user", "content": "你好"}],
+                                "stream": False,
+                            }
+                            anthropic_headers = {
+                                "Content-Type": "application/json",
+                                "anthropic-version": "2023-06-01",
+                            }
+                            anthropic_response = probe_json_post(
+                                f"{url_prefix}/v1/messages",
+                                anthropic_payload,
+                                headers=anthropic_headers,
+                            )
+                            if anthropic_response and anthropic_response.status_code == 200:
+                                anthropic_supported = True
+                                anthropic_status = "✅ 支持 (/v1/messages)"
+                            else:
+                                status_code = (
+                                    anthropic_response.status_code
+                                    if anthropic_response
+                                    else "Connection failed"
+                                )
+                                anthropic_status = (
+                                    f"❌ 不支持或探测失败 (HTTP {status_code})"
+                                )
+
+                        md += f"- Anthropic 协议: {anthropic_status}\n"
                         md += f"\n#### 验证过的 curl 命令:\n"
                         md += f"**获取模型列表:**\n"
                         md += f"```bash\n"
                         md += f"curl -s {url_prefix}/v1/models\n"
                         md += f"```\n"
 
-                        first_model = model_data.get("data", [{}])[0].get("id", "")
                         if first_model:
                             md += f"\n**Chat Completions 测试:**\n"
                             md += f"```bash\n"
@@ -85,6 +133,22 @@ def generate_markdown(clusters_data):
                             md += f'    "stream": false\n'
                             md += f"  }}'\n"
                             md += f"```\n"
+
+                            if anthropic_supported:
+                                md += f"\n**Anthropic Messages 测试:**\n"
+                                md += f"```bash\n"
+                                md += f"curl -X POST '{url_prefix}/v1/messages' \\\n"
+                                md += f"  -H 'Content-Type: application/json' \\\n"
+                                md += (
+                                    f"  -H 'anthropic-version: 2023-06-01' \\\n"
+                                )
+                                md += f"  -d '{{\n"
+                                md += f'    "model": "{first_model}",\n'
+                                md += f'    "max_tokens": 16,\n'
+                                md += f'    "messages": [{{"role": "user", "content": "你好"}}],\n'
+                                md += f'    "stream": false\n'
+                                md += f"  }}'\n"
+                                md += f"```\n"
                     except:
                         md += f"- 模型信息: ❌ 无法解析响应\n"
                 else:

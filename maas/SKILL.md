@@ -32,21 +32,22 @@ uv run /Users/humin/.config/opencode/skills/maas/probe_models.py
 - `/Users/humin/.config/opencode/skills/maas/probe_models.md` - 模型探测报告
 
 ### maas_test.py
-Maas vLLM 自动化测试脚本，入口脚本，用于：
-- 测试 3 个 `max-num-batched-tokens` × 4 个输入长度 × 3 个缓存命中率 = 36 个组合
-- 会 patch 指定 deployment 的 `--max-num-batched-tokens`，等待 rollout 完成后自动进行压测
-- deployment 和指标命名空间固定为 `ske-model`，不再暴露 namespace 参数
+Maas vLLM 单配置压测脚本，只负责压测当前 deployment 现有配置，不修改启动参数。
+- deployment 和指标命名空间固定为 `ske-model`
+- 会先确认 deployment 就绪，默认直接通过 ingress 访问服务进行压测，单轮压测口径尽量对齐 `bench_ingress.py`
+- 默认输出长度为 `256 tokens`
 - 支持显式指定：
   1. `--context`: 集群别名，默认 `zz`
   2. `--deployment-name`: 目标 deployment
   3. `--pods` / `--pod-regex`: 显式传入测试 pod，优先用于 Thanos 指标过滤
-  4. `--batched-tokens`: `max-num-batched-tokens` 值列表
-  5. `--token-lengths`: 输入长度列表
-  6. `--cache-rates`: 缓存命中率列表
-  7. `--concurrency` / `--total-requests`: 每组压测并发和总请求数
-  8. `--metrics-service`: Thanos 中 vLLM 指标的 service 标签，默认等于 deployment 名
-  9. `--thanos-selector` / `--thanos-query`: 自定义 PromQL selector 或整条查询
-  10. `--restore-on-exit`: 压测结束后恢复 deployment 原始参数
+  4. `--token-lengths`: 输入长度列表
+  5. `--cache-rates`: 缓存命中率列表
+  6. `--concurrency` / `--total-requests`: 每组压测并发和总请求数
+  7. `--benchmark-mode`: `fixed` 或 `sustained`
+  8. `--duration-seconds` / `--report-interval-seconds`: sustained 模式参数
+  9. `--base-url`: 显式指定压测入口，默认按 context + deployment 推导 ingress URL
+  10. `--metrics-service`: Thanos 中 vLLM 指标的 service 标签，默认等于 deployment 名
+  11. `--thanos-selector` / `--thanos-query`: 自定义 PromQL selector 或整条查询
 - 从 Thanos 收集指标，默认复用 maas Grafana 面板的 PromQL 口径：
   - `vllm:num_requests_waiting`
   - `vllm:num_requests_running`
@@ -62,10 +63,28 @@ Maas vLLM 自动化测试脚本，入口脚本，用于：
 **使用方法：**
 ```bash
 uv run /Users/humin/agent/maas/maas_test.py --help
-# 默认测试
+# 默认单配置测试
 uv run /Users/humin/agent/maas/maas_test.py
 # 郑州集群实际使用建议
 uv run /Users/humin/agent/maas/maas_test.py \
+  --context zz \
+  --deployment-name minimax-m25-int8-yy \
+  --pods <pod1> <pod2> \
+  --metrics-service minimax-m25-int8-yy \
+  --token-lengths 20000 40000 80000 120000 \
+  --cache-rates 0.0 0.4 0.8
+```
+
+### maas_tune.py
+Maas vLLM 启动参数调优脚本，负责修改 deployment 启动参数并对每个配置做矩阵压测。
+- 当前默认调优参数为 `--max-num-batched-tokens`
+- 会 patch deployment，等待 rollout 完成，再调用与 `maas_test.py` 相同的压测与 Thanos 采集逻辑
+- 支持 `--restore-on-exit` 在测试结束后恢复原始参数
+
+**使用方法：**
+```bash
+uv run /Users/humin/agent/maas/maas_tune.py --help
+uv run /Users/humin/agent/maas/maas_tune.py \
   --context zz \
   --deployment-name minimax-m25-int8-yy \
   --pods <pod1> <pod2> \
