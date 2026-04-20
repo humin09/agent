@@ -299,3 +299,109 @@ changed 19 packages in 10s
   run `npm fund` for details
 /Users/humin/agent/scripts/daily-upgrade.sh:9: command not found: claude
 
+=== Sat Apr 18 06:00:01 CST 2026 ===
+==> Auto-updating Homebrew...
+Adjust how often this is run with `$HOMEBREW_AUTO_UPDATE_SECS` or disable with
+`$HOMEBREW_NO_AUTO_UPDATE=1`. Hide these hints with `$HOMEBREW_NO_ENV_HINTS=1` (see `man brew`).
+Error: Failed to download https://formulae.brew.sh/api/cask.jws.json!
+==> Auto-updated Homebrew!
+==> Updated Homebrew from 598ecb7ce3 to f560f2b958.
+Warning: cask.jws.json: update failed, falling back to cached version.
+Updated 2 taps (homebrew/core and homebrew/cask).
+==> New Formulae
+odinfmt: Formatter for The Odin Programming Language
+ols: Language server for The Odin Programming Language
+
+You have 1 outdated formula installed.
+
+✔︎ JSON API formula.jws.json
+==> Upgrading 1 outdated package:
+openexr 3.4.9_1 -> 3.4.10
+==> Fetching downloads for: openexr
+✔︎ Bottle openexr (3.4.10)
+==> Upgrading openexr
+  3.4.9_1 -> 3.4.10 
+==> Pouring openexr--3.4.10.arm64_tahoe.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/openexr/3.4.10: 212 files, 4.7MB
+==> Running `brew cleanup openexr`...
+Disable this behaviour by setting `HOMEBREW_NO_INSTALL_CLEANUP=1`.
+Hide these hints with `HOMEBREW_NO_ENV_HINTS=1` (see `man brew`).
+Removing: /opt/homebrew/Cellar/openexr/3.4.9_1... (212 files, 4.6MB)
+Removing: /Users/humin/Library/Caches/Homebrew/openexr_bottle_manifest--3.4.9_1... (16.9KB)
+Removing: /Users/humin/Library/Caches/Homebrew/openexr--3.4.9_1... (1MB)
+
+changed 19 packages in 14s
+
+15 packages are looking for funding
+  run `npm fund` for details
+/Users/humin/agent/scripts/daily-upgrade.sh:9: command not found: claude
+
+=== Sun Apr 19 06:06:18 CST 2026 ===
+==> Auto-updating Homebrew...
+Adjust how often this is run with `$HOMEBREW_AUTO_UPDATE_SECS` or disable with
+`$HOMEBREW_NO_AUTO_UPDATE=1`. Hide these hints with `$HOMEBREW_NO_ENV_HINTS=1` (see `man brew`).
+==> Auto-updated Homebrew!
+==> Updated Homebrew from f560f2b958 to 3aae056b8d.
+Updated 2 taps (homebrew/core and homebrew/cask).
+==> New Formulae
+cc-connect: Bridges local AI coding agents to messaging platforms
+
+You have 1 outdated formula installed.
+
+==> Upgrading 1 outdated package:
+simdjson 4.6.1 -> 4.6.2
+==> Fetching downloads for: simdjson
+✔︎ Bottle simdjson (4.6.2)
+==> Upgrading simdjson
+  4.6.1 -> 4.6.2 
+==> Pouring simdjson--4.6.2.arm64_tahoe.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/simdjson/4.6.2: 19 files, 8.0MB
+==> Running `brew cleanup simdjson`...
+Disable this behaviour by setting `HOMEBREW_NO_INSTALL_CLEANUP=1`.
+Hide these hints with `HOMEBREW_NO_ENV_HINTS=1` (see `man brew`).
+Removing: /opt/homebrew/Cellar/simdjson/4.6.1... (19 files, 7.9MB)
+Removing: /Users/humin/Library/Caches/Homebrew/simdjson_bottle_manifest--4.6.1... (7.4KB)
+Removing: /Users/humin/Library/Caches/Homebrew/simdjson--4.6.1... (1.4MB)
+
+changed 19 packages in 10s
+
+15 packages are looking for funding
+  run `npm fund` for details
+/Users/humin/agent/scripts/daily-upgrade.sh:9: command not found: claude
+
+=== Mon Apr 20 06:13:08 CST 2026 ===
+==> Auto-updating Homebrew...
+Adjust how often this is run with `$HOMEBREW_AUTO_UPDATE_SECS` or disable with
+`$HOMEBREW_NO_AUTO_UPDATE=1`. Hide these hints with `$HOMEBREW_NO_ENV_HINTS=1` (see `man brew`).
+==> Auto-updated Homebrew!
+==> Updated Homebrew from 5.1.6 (3aae056b8d) to 5.1.7 (30baed1048).
+Updated 2 taps (homebrew/core and homebrew/cask).
+==> New Formulae
+openssl@4: Cryptography and SSL/TLS Toolkit
+
+You have 1 outdated formula installed.
+
+
+The 5.1.7 changelog can be found at:
+  https://github.com/Homebrew/brew/releases/tag/5.1.7
+==> Upgrading 1 outdated package:
+at-spi2-core 2.60.0 -> 2.60.1
+==> Fetching downloads for: at-spi2-core
+✔︎ Bottle at-spi2-core (2.60.1)
+==> Upgrading at-spi2-core
+  2.60.0 -> 2.60.1 
+==> Pouring at-spi2-core--2.60.1.arm64_tahoe.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/at-spi2-core/2.60.1: 202 files, 4.6MB
+==> Running `brew cleanup at-spi2-core`...
+Disable this behaviour by setting `HOMEBREW_NO_INSTALL_CLEANUP=1`.
+Hide these hints with `HOMEBREW_NO_ENV_HINTS=1` (see `man brew`).
+Removing: /opt/homebrew/Cellar/at-spi2-core/2.60.0... (202 files, 4.6MB)
+Removing: /Users/humin/Library/Caches/Homebrew/at-spi2-core_bottle_manifest--2.60.0... (25.9KB)
+Removing: /Users/humin/Library/Caches/Homebrew/at-spi2-core--2.60.0... (830.5KB)
+
+changed 19 packages in 11s
+
+15 packages are looking for funding
+  run `npm fund` for details
+/Users/humin/agent/scripts/daily-upgrade.sh:9: command not found: claude
+
