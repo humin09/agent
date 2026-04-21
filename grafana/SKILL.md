@@ -9,7 +9,7 @@ targets: ["*"]
 ## 访问信息
 
 - 地址：`https://grafana.ksai.scnet.cn:58043`
-- 账户：`admin` / `prom-sugon`
+- 账户：`admin` / `sugon@123!`
 - 集群：昆山（ks），命名空间：`ske`
 - ai 文件夹 folderUid：`aek4z00z7upkwa`
 
@@ -17,13 +17,13 @@ targets: ["*"]
 
 ```bash
 # 搜索 dashboard
-curl -sk -u admin:prom-sugon 'https://grafana.ksai.scnet.cn:58043/api/search?type=dash-db'
+curl -sk -u admin:sugon@123! 'https://grafana.ksai.scnet.cn:58043/api/search?type=dash-db'
 
 # 获取 dashboard JSON
-curl -sk -u admin:prom-sugon 'https://grafana.ksai.scnet.cn:58043/api/dashboards/uid/<UID>'
+curl -sk -u admin:sugon@123! 'https://grafana.ksai.scnet.cn:58043/api/dashboards/uid/<UID>'
 
 # 推送 dashboard（注意带 folderUid）
-curl -sk -u admin:prom-sugon -X POST 'https://grafana.ksai.scnet.cn:58043/api/dashboards/db' \
+curl -sk -u admin:sugon@123! -X POST 'https://grafana.ksai.scnet.cn:58043/api/dashboards/db' \
   -H 'Content-Type: application/json' -d @payload.json
 ```
 

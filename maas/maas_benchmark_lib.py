@@ -409,7 +409,14 @@ async def measure_streaming_request(
                 if line.startswith("data: ") and line != "data: [DONE]":
                     chunk = json.loads(line[6:])
                     delta = chunk.get("choices", [{}])[0].get("delta", {})
-                    content = delta.get("content") or delta.get("reasoning_content")
+                    # Newer vLLM builds may stream reasoning tokens under `reasoning`
+                    # instead of `reasoning_content`. Treat any of these as first-token
+                    # arrival so TTFT/E2E remain comparable across image variants.
+                    content = (
+                        delta.get("content")
+                        or delta.get("reasoning_content")
+                        or delta.get("reasoning")
+                    )
                     if content:
                         if ttft is None:
                             ttft = time.monotonic() - start
