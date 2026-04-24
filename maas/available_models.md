@@ -1,5 +1,5 @@
 # ske-model 可用模型列表
-生成时间: 2026-04-18 09:26:52
+生成时间: 2026-04-22 17:27:23
 
 ## 昆山 集群
 
@@ -209,7 +209,7 @@ curl -X POST 'http://qwq-32b.ksai.scnet.cn:58000/v1/chat/completions' \
 - 模型信息: ❌ 无对应 ingress
 
 ### minimax-m25-int8
-- 副本数: 26/26
+- 副本数: 40/40
 - 访问地址: `http://minimax-m25-int8.zzai2.scnet.cn:58000`
 - 模型信息:
   - `/models/MiniMax-M2.5-W8A8`
@@ -247,8 +247,47 @@ curl -X POST 'http://minimax-m25-int8.zzai2.scnet.cn:58000/v1/messages' \
   }'
 ```
 
+### minimax-m25-int8-test
+- 副本数: 1/1
+- 访问地址: `http://minimax-m25-int8-test.zzai2.scnet.cn:58000`
+- 模型信息:
+  - `/models/MiniMax-M2.5-W8A8`
+    - 最大上下文长度: 196608
+- Anthropic 协议: ✅ 支持 (/v1/messages)
+
+#### 验证过的 curl 命令:
+**获取模型列表:**
+```bash
+curl -s http://minimax-m25-int8-test.zzai2.scnet.cn:58000/v1/models
+```
+
+**Chat Completions 测试:**
+```bash
+curl -X POST 'http://minimax-m25-int8-test.zzai2.scnet.cn:58000/v1/chat/completions' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "/models/MiniMax-M2.5-W8A8",
+    "messages": [{"role": "user", "content": "你好"}],
+    "temperature": 0.7,
+    "stream": false
+  }'
+```
+
+**Anthropic Messages 测试:**
+```bash
+curl -X POST 'http://minimax-m25-int8-test.zzai2.scnet.cn:58000/v1/messages' \
+  -H 'Content-Type: application/json' \
+  -H 'anthropic-version: 2023-06-01' \
+  -d '{
+    "model": "/models/MiniMax-M2.5-W8A8",
+    "max_tokens": 16,
+    "messages": [{"role": "user", "content": "你好"}],
+    "stream": false
+  }'
+```
+
 ### minimax-m25-int8-vip
-- 副本数: 37/37
+- 副本数: 100/100
 - 访问地址: `http://minimax-m25-int8-vip.zzai2.scnet.cn:58000`
 - 模型信息:
   - `/models/MiniMax-M2.5-W8A8`
@@ -285,6 +324,15 @@ curl -X POST 'http://minimax-m25-int8-vip.zzai2.scnet.cn:58000/v1/messages' \
     "stream": false
   }'
 ```
+
+### minimax-m25-int8-vllm18
+- 副本数: 1/0
+- 访问地址: `http://minimax-m25-int8-vllm18.zzai2.scnet.cn:58000`
+- 模型信息: ❌ 无法访问 (HTTP Connection failed)
+
+### minimax-m25-int8-vllm8
+- 副本数: 1/0
+- 模型信息: ❌ 无对应 ingress
 
 ### minimax-m25-int8-yy
 - 副本数: 1/1
@@ -481,8 +529,13 @@ curl -X POST 'http://minimax-m27-bf16-test.zzai2.scnet.cn:58000/v1/messages' \
   }'
 ```
 
+### minimax-m27-bf16-vllm18
+- 副本数: 1/0
+- 访问地址: `http://minimax-m27-bf16-vllm18.zzai2.scnet.cn:58000`
+- 模型信息: ❌ 无法访问 (HTTP Connection failed)
+
 ### qwen3-235b-a22b
-- 副本数: 9/9
+- 副本数: 10/10
 - 访问地址: `http://qwen3-235b-a22b.zzai2.scnet.cn:58000`
 - 模型信息:
   - `/data/model/Qwen3-235B-A22B`
@@ -608,7 +661,7 @@ curl -X POST 'http://qwen3-30b-a3b-instruct-2507.zzai2.scnet.cn:58000/v1/chat/co
 - 模型信息:
   - `/public/ai_data/models/Qwen3.6-35B-A3B`
     - 最大上下文长度: 262144
-- Anthropic 协议: ✅ 支持 (/v1/messages)
+- Anthropic 协议: ❌ 不支持或探测失败 (HTTP Connection failed)
 
 #### 验证过的 curl 命令:
 **获取模型列表:**
@@ -624,19 +677,6 @@ curl -X POST 'http://qwen36.zzai2.scnet.cn:58000/v1/chat/completions' \
     "model": "/public/ai_data/models/Qwen3.6-35B-A3B",
     "messages": [{"role": "user", "content": "你好"}],
     "temperature": 0.7,
-    "stream": false
-  }'
-```
-
-**Anthropic Messages 测试:**
-```bash
-curl -X POST 'http://qwen36.zzai2.scnet.cn:58000/v1/messages' \
-  -H 'Content-Type: application/json' \
-  -H 'anthropic-version: 2023-06-01' \
-  -d '{
-    "model": "/public/ai_data/models/Qwen3.6-35B-A3B",
-    "max_tokens": 16,
-    "messages": [{"role": "user", "content": "你好"}],
     "stream": false
   }'
 ```
@@ -681,54 +721,12 @@ curl -X POST 'http://qwen36-vllm18.zzai2.scnet.cn:58000/v1/messages' \
 ```
 
 ### wan22-ti2v-5b-diffusers
-- 副本数: 1/1
+- 副本数: 1/0
 - 访问地址: `http://wan22-ti2v-5b-diffusers.zzai2.scnet.cn:58000`
-- 模型信息:
-  - `/data/models/Wan2.2-TI2V-5B-Diffusers`
-    - 最大上下文长度: None
-- Anthropic 协议: ❌ 不支持或探测失败 (HTTP Connection failed)
-
-#### 验证过的 curl 命令:
-**获取模型列表:**
-```bash
-curl -s http://wan22-ti2v-5b-diffusers.zzai2.scnet.cn:58000/v1/models
-```
-
-**Chat Completions 测试:**
-```bash
-curl -X POST 'http://wan22-ti2v-5b-diffusers.zzai2.scnet.cn:58000/v1/chat/completions' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model": "/data/models/Wan2.2-TI2V-5B-Diffusers",
-    "messages": [{"role": "user", "content": "你好"}],
-    "temperature": 0.7,
-    "stream": false
-  }'
-```
+- 模型信息: ❌ 无法访问 (HTTP Connection failed)
 
 ### z-image-turbo
-- 副本数: 1/1
+- 副本数: 1/0
 - 访问地址: `http://z-image-turbo.zzai2.scnet.cn:58000`
-- 模型信息:
-  - `/data/models/Z-Image-Turbo`
-    - 最大上下文长度: None
-- Anthropic 协议: ❌ 不支持或探测失败 (HTTP Connection failed)
-
-#### 验证过的 curl 命令:
-**获取模型列表:**
-```bash
-curl -s http://z-image-turbo.zzai2.scnet.cn:58000/v1/models
-```
-
-**Chat Completions 测试:**
-```bash
-curl -X POST 'http://z-image-turbo.zzai2.scnet.cn:58000/v1/chat/completions' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model": "/data/models/Z-Image-Turbo",
-    "messages": [{"role": "user", "content": "你好"}],
-    "temperature": 0.7,
-    "stream": false
-  }'
-```
+- 模型信息: ❌ 无法访问 (HTTP Connection failed)
 

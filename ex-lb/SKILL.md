@@ -27,6 +27,7 @@ targets: ["*"]
 - ex-lb 节点标签：`ex-lb=true`
 - 配置目录：`/etc/ex-lb/conf`
 - 服务管理：`systemctl status/reload ex-lb`
+- 配置验证: `/etc/ex-lb/sbin/ex-lb -c /etc/ex-lb/conf/ex-lb.conf`
 
 常用命令：
 
