@@ -1,156 +1,0 @@
-=== Wed Apr 22 06:00:04 CST 2026 ===
-==> Auto-updating Homebrew...
-Adjust how often this is run with `$HOMEBREW_AUTO_UPDATE_SECS` or disable with
-`$HOMEBREW_NO_AUTO_UPDATE=1`. Hide these hints with `$HOMEBREW_NO_ENV_HINTS=1` (see `man brew`).
-==> Auto-updated Homebrew!
-==> Updated Homebrew from d95b16e7f7 to 0f962ab94a.
-Updated 1 tap (homebrew/cask).
-
-You have 1 outdated formula installed.
-
-==> Upgrading 1 outdated package:
-simdjson 4.6.2 -> 4.6.3
-==> Fetching downloads for: simdjson
-✔︎ Bottle simdjson (4.6.3)
-==> Upgrading simdjson
-  4.6.2 -> 4.6.3 
-==> Pouring simdjson--4.6.3.arm64_tahoe.bottle.tar.gz
-🍺  /opt/homebrew/Cellar/simdjson/4.6.3: 19 files, 8.0MB
-==> Running `brew cleanup simdjson`...
-Disable this behaviour by setting `HOMEBREW_NO_INSTALL_CLEANUP=1`.
-Hide these hints with `HOMEBREW_NO_ENV_HINTS=1` (see `man brew`).
-Removing: /opt/homebrew/Cellar/simdjson/4.6.2... (19 files, 8.0MB)
-Removing: /Users/humin/Library/Caches/Homebrew/simdjson_bottle_manifest--4.6.2... (7.3KB)
-Removing: /Users/humin/Library/Caches/Homebrew/simdjson--4.6.2... (1.4MB)
-npm warn deprecated puppeteer@23.11.1: < 24.15.0 is no longer supported
-
-changed 386 packages in 30s
-
-54 packages are looking for funding
-  run `npm fund` for details
-/Users/humin/agent/scripts/daily-upgrade.sh:9: command not found: claude
-
-=== Thu Apr 23 06:00:05 CST 2026 ===
-==> Auto-updating Homebrew...
-Adjust how often this is run with `$HOMEBREW_AUTO_UPDATE_SECS` or disable with
-`$HOMEBREW_NO_AUTO_UPDATE=1`. Hide these hints with `$HOMEBREW_NO_ENV_HINTS=1` (see `man brew`).
-==> Downloading https://ghcr.io/v2/homebrew/core/portable-ruby/blobs/sha256:8ad98d9cf15477d1a43f4012cfd5eff5c271398bca1e2724b55bd4944a0bb1d4
-#=#=#                                                                          ##O#-#                                                                         ##O=#  #                                                                       #=#=-#  #                                                                      -#O#- #   #                                                                    -=#=#   #   #                                                                  -=O#-#   #   #                                                                 -=O=#  #   #   #                                                               -=O=-#  #    #   #                                                             -=O=- #   #   #    #                                                           -=O=-   #   #   #     #                                                                                                                                   0.1%                                                                           0.3%                                                                           0.9%#                                                                          2.1%###                                                                        4.4%####                                                                       6.5%######                                                                     9.0%############                                                              17.9%#################                                                         24.3%##########################                                                36.5%###################################                                       49.7%#############################################                             63.5%########################################################                  78.3%#################################################################         91.3%######################################################################## 100.0%
-==> Pouring portable-ruby-4.0.3.arm64_big_sur.bottle.tar.gz
-==> Auto-updated Homebrew!
-==> Updated Homebrew from 0f962ab94a to b118bf33c2.
-Updated 2 taps (homebrew/core and homebrew/cask).
-==> New Formulae
-try: Quickly manage and navigate project directories for experiments
-vite-plus: Unified toolchain and entry point for web development
-
-You have 3 outdated formulae installed.
-
-==> Upgrading 3 outdated packages:
-simdutf 8.2.0 -> 9.0.0
-merve 1.2.2 -> 1.2.2_1
-pnpm 10.33.0 -> 10.33.1
-==> Fetching downloads for: simdutf, merve and pnpm
-✔︎ Bottle merve (1.2.2_1)
-✔︎ Bottle pnpm (10.33.1)
-✔︎ Bottle simdutf (9.0.0)
-==> Upgrading simdutf
-  8.2.0 -> 9.0.0 
-==> Pouring simdutf--9.0.0.arm64_tahoe.bottle.tar.gz
-🍺  /opt/homebrew/Cellar/simdutf/9.0.0: 65 files, 2MB
-==> Running `brew cleanup simdutf`...
-Disable this behaviour by setting `HOMEBREW_NO_INSTALL_CLEANUP=1`.
-Hide these hints with `HOMEBREW_NO_ENV_HINTS=1` (see `man brew`).
-Removing: /opt/homebrew/Cellar/simdutf/8.2.0... (61 files, 1.9MB)
-Removing: /Users/humin/Library/Caches/Homebrew/simdutf_bottle_manifest--8.2.0... (8.7KB)
-Removing: /Users/humin/Library/Caches/Homebrew/simdutf--8.2.0... (334.9KB)
-==> Upgrading merve
-  1.2.2 -> 1.2.2_1 
-==> Pouring merve--1.2.2_1.arm64_tahoe.bottle.tar.gz
-🍺  /opt/homebrew/Cellar/merve/1.2.2_1: 19 files, 152.0KB
-==> Running `brew cleanup merve`...
-Removing: /opt/homebrew/Cellar/merve/1.2.2... (19 files, 154.4KB)
-Removing: /Users/humin/Library/Caches/Homebrew/merve_bottle_manifest--1.2.2... (9.3KB)
-Removing: /Users/humin/Library/Caches/Homebrew/merve--1.2.2... (33.3KB)
-==> Upgrading pnpm
-  10.33.0 -> 10.33.1 
-==> Pouring pnpm--10.33.1.arm64_tahoe.bottle.tar.gz
-==> Caveats
-pnpm requires a Node installation to function. You can install one with:
-  brew install node
-==> Summary
-🍺  /opt/homebrew/Cellar/pnpm/10.33.1: 1,085 files, 17.9MB
-==> Running `brew cleanup pnpm`...
-Removing: /opt/homebrew/Cellar/pnpm/10.33.0... (1,086 files, 17.9MB)
-Removing: /Users/humin/Library/Caches/Homebrew/pnpm_bottle_manifest--10.33.0... (7.4KB)
-Removing: /Users/humin/Library/Caches/Homebrew/pnpm--10.33.0... (4.1MB)
-==> Caveats
-zsh completions have been installed to:
-  /opt/homebrew/share/zsh/site-functions
-==> pnpm
-pnpm requires a Node installation to function. You can install one with:
-  brew install node
-npm warn deprecated puppeteer@23.11.1: < 24.15.0 is no longer supported
-
-removed 2 packages, and changed 401 packages in 13m
-
-52 packages are looking for funding
-  run `npm fund` for details
-/Users/humin/agent/scripts/daily-upgrade.sh:9: command not found: claude
-
-=== Fri Apr 24 06:00:05 CST 2026 ===
-==> Auto-updating Homebrew...
-Adjust how often this is run with `$HOMEBREW_AUTO_UPDATE_SECS` or disable with
-`$HOMEBREW_NO_AUTO_UPDATE=1`. Hide these hints with `$HOMEBREW_NO_ENV_HINTS=1` (see `man brew`).
-==> Auto-updated Homebrew!
-==> Updated Homebrew from b118bf33c2 to 8d859f30f3.
-Updated 2 taps (homebrew/core and homebrew/cask).
-==> New Formulae
-floresta: Lightweight and embeddable Bitcoin client, built for sovereignty
-forgecode: AI-enhanced terminal development environment
-lazymake: Modern TUI for Makefiles
-
-You have 2 outdated formulae installed.
-
-==> Upgrading 2 outdated packages:
-highway 1.3.0 -> 1.4.0
-pnpm 10.33.1 -> 10.33.2
-==> Fetching downloads for: highway and pnpm
-✔︎ Bottle highway (1.4.0)
-✔︎ Bottle pnpm (10.33.2)
-==> Upgrading highway
-  1.3.0 -> 1.4.0 
-==> Pouring highway--1.4.0.arm64_tahoe.bottle.tar.gz
-🍺  /opt/homebrew/Cellar/highway/1.4.0: 87 files, 5.7MB
-==> Running `brew cleanup highway`...
-Disable this behaviour by setting `HOMEBREW_NO_INSTALL_CLEANUP=1`.
-Hide these hints with `HOMEBREW_NO_ENV_HINTS=1` (see `man brew`).
-Removing: /opt/homebrew/Cellar/highway/1.3.0... (81 files, 5.6MB)
-Removing: /Users/humin/Library/Caches/Homebrew/highway_bottle_manifest--1.3.0... (9.7KB)
-Removing: /Users/humin/Library/Caches/Homebrew/highway--1.3.0... (896.7KB)
-==> Upgrading pnpm
-  10.33.1 -> 10.33.2 
-==> Pouring pnpm--10.33.2.arm64_tahoe.bottle.tar.gz
-==> Caveats
-pnpm requires a Node installation to function. You can install one with:
-  brew install node
-==> Summary
-🍺  /opt/homebrew/Cellar/pnpm/10.33.2: 1,085 files, 17.9MB
-==> Running `brew cleanup pnpm`...
-Removing: /opt/homebrew/Cellar/pnpm/10.33.1... (1,085 files, 17.9MB)
-Removing: /Users/humin/Library/Caches/Homebrew/pnpm_bottle_manifest--10.33.1... (7.4KB)
-Removing: /Users/humin/Library/Caches/Homebrew/pnpm--10.33.1... (4.1MB)
-==> Caveats
-zsh completions have been installed to:
-  /opt/homebrew/share/zsh/site-functions
-==> pnpm
-pnpm requires a Node installation to function. You can install one with:
-  brew install node
-npm warn deprecated puppeteer@23.11.1: < 24.15.0 is no longer supported
-
-changed 386 packages in 36s
-
-52 packages are looking for funding
-  run `npm fund` for details
-/Users/humin/agent/scripts/daily-upgrade.sh:9: command not found: claude
-

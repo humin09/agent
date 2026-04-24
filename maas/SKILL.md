@@ -7,7 +7,7 @@ targets: ["*"]
 # Maas 模型 URL 生成与探测
 
 本 Skill 用于ske-model在昆山和郑州的部署的维护
-1. 如果有ske-model的服务变更(replica数量调整除外), 你会把昆山和郑州的deployment和ingress的yaml同步到~/Users/humin/sugon/ske-chart/ske-model/ks和~/Users/humin/sugon/ske-chart/ske-model/zz
+1. 如果有ske-model的服务变更(replica数量调整除外), 你会把昆山和郑州的deployment和ingress的yaml同步到~/sugon/ske-chart/ske-model/ks和~/sugon/ske-chart/ske-model/zz
 2. 如果有ske-model的服务变更,你会重新生成服务的可探测url, url生成规则见下面章节.
 3. 如果用户说检查服务, 你会查看各个deployment是否都达到预期的副本数, 以及基于可探测url校验服务是否可用.
 4. 如果用户说更新可用模型列表, 你会运行 probe_models.py 脚本来生成 available_models.md 报告.

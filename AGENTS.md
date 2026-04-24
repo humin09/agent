@@ -146,7 +146,7 @@ K8s 基础信息（当前基线）：
 - Ingress NGINX: `image.ac.com:5000/k8s/bitnami/nginx-ingress-controller:1.11.3-debian-12-r6`
 - Volcano: `vc-webhook-manager:v1.10.0`、`vc-controller-manager:v1.10.4`、`vc-scheduler:v1.10.0`
 
-kubeasz 详细配置、组件更新与节点维护规则见：`/Users/humin/agent/kubeasz/SKILL.md`
+kubeasz 详细配置、组件更新与节点维护规则见：`~/agent/kubeasz/SKILL.md`
 
 ### 3.4 业务命名空间映射
 
@@ -176,7 +176,7 @@ kubectl --context <别名> -n kube-system get resourcegroup
 kubectl --context <别名> get node -l resourceGroup=<resourcegroup>
 ```
 
-ResourceGroup 详细规则见：`/Users/humin/agent/resourcegroup/SKILL.md`
+ResourceGroup 详细规则见：`~/agent/resourcegroup/SKILL.md`
 
 Hostname -> IP：
 ```bash
@@ -224,13 +224,13 @@ docker push image.ac.com:5000/k8s/<镜像名>:<tag>
 ### 3.8 拆分子专题 Skills（按需加载）
 
 以下章节拆分为独立 Skill，执行相关任务时必须加载：
-- MinIO: `/Users/humin/agent/minio/SKILL.md`
-- Grafana: `/Users/humin/agent/grafana/SKILL.md`
-- Thanos: `/Users/humin/agent/thanos/SKILL.md`
-- Calico: `/Users/humin/agent/calico/SKILL.md`
-- ResourceGroup: `/Users/humin/agent/resourcegroup/SKILL.md`
-- Ex-LB: `/Users/humin/agent/ex-lb/SKILL.md`
-- kubeasz: `/Users/humin/agent/kubeasz/SKILL.md`
+- MinIO: `~/agent/minio/SKILL.md`
+- Grafana: `~/agent/grafana/SKILL.md`
+- Thanos: `~/agent/thanos/SKILL.md`
+- Calico: `~/agent/calico/SKILL.md`
+- ResourceGroup: `~/agent/resourcegroup/SKILL.md`
+- Ex-LB: `~/agent/ex-lb/SKILL.md`
+- kubeasz: `~/agent/kubeasz/SKILL.md`
 
 ### 3.9 标准变更执行流程（强制）
 
