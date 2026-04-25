@@ -1,5 +1,5 @@
 # ske-model 可用模型列表
-生成时间: 2026-04-22 17:27:23
+生成时间: 2026-04-25 16:01:01
 
 ## 昆山 集群
 
@@ -112,6 +112,45 @@ curl -X POST 'http://deepseek-r1-0528-8b.ksai.scnet.cn:58000/v1/chat/completions
   }'
 ```
 
+### deepseek-v4-pro
+- 副本数: 1/1
+- 访问地址: `http://deepseek-v4-pro.ksai.scnet.cn:58000`
+- 模型信息:
+  - `deepseek-v4-pro`
+    - 最大上下文长度: 1000000
+- Anthropic 协议: ✅ 支持 (/v1/messages)
+
+#### 验证过的 curl 命令:
+**获取模型列表:**
+```bash
+curl -s http://deepseek-v4-pro.ksai.scnet.cn:58000/v1/models
+```
+
+**Chat Completions 测试:**
+```bash
+curl -X POST 'http://deepseek-v4-pro.ksai.scnet.cn:58000/v1/chat/completions' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "deepseek-v4-pro",
+    "messages": [{"role": "user", "content": "你好"}],
+    "temperature": 0.7,
+    "stream": false
+  }'
+```
+
+**Anthropic Messages 测试:**
+```bash
+curl -X POST 'http://deepseek-v4-pro.ksai.scnet.cn:58000/v1/messages' \
+  -H 'Content-Type: application/json' \
+  -H 'anthropic-version: 2023-06-01' \
+  -d '{
+    "model": "deepseek-v4-pro",
+    "max_tokens": 16,
+    "messages": [{"role": "user", "content": "你好"}],
+    "stream": false
+  }'
+```
+
 ### qwen3-30b-a3b
 - 副本数: 5/4
 - 访问地址: `http://qwen3-30b-k100.ksai.scnet.cn:58000`
@@ -208,8 +247,13 @@ curl -X POST 'http://qwq-32b.ksai.scnet.cn:58000/v1/chat/completions' \
 - 副本数: 0/0
 - 模型信息: ❌ 无对应 ingress
 
+### kimi-k26
+- 副本数: 1/0
+- 访问地址: `http://kimi-k26.zzai2.scnet.cn:58000`
+- 模型信息: ❌ 无法访问 (HTTP Connection failed)
+
 ### minimax-m25-int8
-- 副本数: 40/40
+- 副本数: 30/30
 - 访问地址: `http://minimax-m25-int8.zzai2.scnet.cn:58000`
 - 模型信息:
   - `/models/MiniMax-M2.5-W8A8`
@@ -247,47 +291,8 @@ curl -X POST 'http://minimax-m25-int8.zzai2.scnet.cn:58000/v1/messages' \
   }'
 ```
 
-### minimax-m25-int8-test
-- 副本数: 1/1
-- 访问地址: `http://minimax-m25-int8-test.zzai2.scnet.cn:58000`
-- 模型信息:
-  - `/models/MiniMax-M2.5-W8A8`
-    - 最大上下文长度: 196608
-- Anthropic 协议: ✅ 支持 (/v1/messages)
-
-#### 验证过的 curl 命令:
-**获取模型列表:**
-```bash
-curl -s http://minimax-m25-int8-test.zzai2.scnet.cn:58000/v1/models
-```
-
-**Chat Completions 测试:**
-```bash
-curl -X POST 'http://minimax-m25-int8-test.zzai2.scnet.cn:58000/v1/chat/completions' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model": "/models/MiniMax-M2.5-W8A8",
-    "messages": [{"role": "user", "content": "你好"}],
-    "temperature": 0.7,
-    "stream": false
-  }'
-```
-
-**Anthropic Messages 测试:**
-```bash
-curl -X POST 'http://minimax-m25-int8-test.zzai2.scnet.cn:58000/v1/messages' \
-  -H 'Content-Type: application/json' \
-  -H 'anthropic-version: 2023-06-01' \
-  -d '{
-    "model": "/models/MiniMax-M2.5-W8A8",
-    "max_tokens": 16,
-    "messages": [{"role": "user", "content": "你好"}],
-    "stream": false
-  }'
-```
-
 ### minimax-m25-int8-vip
-- 副本数: 100/100
+- 副本数: 100/99
 - 访问地址: `http://minimax-m25-int8-vip.zzai2.scnet.cn:58000`
 - 模型信息:
   - `/models/MiniMax-M2.5-W8A8`
@@ -324,15 +329,6 @@ curl -X POST 'http://minimax-m25-int8-vip.zzai2.scnet.cn:58000/v1/messages' \
     "stream": false
   }'
 ```
-
-### minimax-m25-int8-vllm18
-- 副本数: 1/0
-- 访问地址: `http://minimax-m25-int8-vllm18.zzai2.scnet.cn:58000`
-- 模型信息: ❌ 无法访问 (HTTP Connection failed)
-
-### minimax-m25-int8-vllm8
-- 副本数: 1/0
-- 模型信息: ❌ 无对应 ingress
 
 ### minimax-m25-int8-yy
 - 副本数: 1/1
@@ -374,7 +370,7 @@ curl -X POST 'http://minimax-m25-int8-yy.zzai2.scnet.cn:58000/v1/messages' \
 ```
 
 ### minimax-m25-internal
-- 副本数: 4/4
+- 副本数: 4/2
 - 访问地址: `http://minimax-m25-internal.zzai2.scnet.cn:58000`
 - 模型信息:
   - `/models/MiniMax-M2.5-W8A8`
@@ -402,84 +398,6 @@ curl -X POST 'http://minimax-m25-internal.zzai2.scnet.cn:58000/v1/chat/completio
 **Anthropic Messages 测试:**
 ```bash
 curl -X POST 'http://minimax-m25-internal.zzai2.scnet.cn:58000/v1/messages' \
-  -H 'Content-Type: application/json' \
-  -H 'anthropic-version: 2023-06-01' \
-  -d '{
-    "model": "/models/MiniMax-M2.5-W8A8",
-    "max_tokens": 16,
-    "messages": [{"role": "user", "content": "你好"}],
-    "stream": false
-  }'
-```
-
-### minimax-m25-test1
-- 副本数: 1/1
-- 访问地址: `http://minimax-m25-test1.zzai2.scnet.cn:58000`
-- 模型信息:
-  - `/models/MiniMax-M2.5-W8A8`
-    - 最大上下文长度: 196608
-- Anthropic 协议: ✅ 支持 (/v1/messages)
-
-#### 验证过的 curl 命令:
-**获取模型列表:**
-```bash
-curl -s http://minimax-m25-test1.zzai2.scnet.cn:58000/v1/models
-```
-
-**Chat Completions 测试:**
-```bash
-curl -X POST 'http://minimax-m25-test1.zzai2.scnet.cn:58000/v1/chat/completions' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model": "/models/MiniMax-M2.5-W8A8",
-    "messages": [{"role": "user", "content": "你好"}],
-    "temperature": 0.7,
-    "stream": false
-  }'
-```
-
-**Anthropic Messages 测试:**
-```bash
-curl -X POST 'http://minimax-m25-test1.zzai2.scnet.cn:58000/v1/messages' \
-  -H 'Content-Type: application/json' \
-  -H 'anthropic-version: 2023-06-01' \
-  -d '{
-    "model": "/models/MiniMax-M2.5-W8A8",
-    "max_tokens": 16,
-    "messages": [{"role": "user", "content": "你好"}],
-    "stream": false
-  }'
-```
-
-### minimax-m25-test2
-- 副本数: 1/1
-- 访问地址: `http://minimax-m25-test2.zzai2.scnet.cn:58000`
-- 模型信息:
-  - `/models/MiniMax-M2.5-W8A8`
-    - 最大上下文长度: 196608
-- Anthropic 协议: ✅ 支持 (/v1/messages)
-
-#### 验证过的 curl 命令:
-**获取模型列表:**
-```bash
-curl -s http://minimax-m25-test2.zzai2.scnet.cn:58000/v1/models
-```
-
-**Chat Completions 测试:**
-```bash
-curl -X POST 'http://minimax-m25-test2.zzai2.scnet.cn:58000/v1/chat/completions' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model": "/models/MiniMax-M2.5-W8A8",
-    "messages": [{"role": "user", "content": "你好"}],
-    "temperature": 0.7,
-    "stream": false
-  }'
-```
-
-**Anthropic Messages 测试:**
-```bash
-curl -X POST 'http://minimax-m25-test2.zzai2.scnet.cn:58000/v1/messages' \
   -H 'Content-Type: application/json' \
   -H 'anthropic-version: 2023-06-01' \
   -d '{
@@ -556,45 +474,6 @@ curl -X POST 'http://qwen3-235b-a22b.zzai2.scnet.cn:58000/v1/chat/completions' \
     "model": "/data/model/Qwen3-235B-A22B",
     "messages": [{"role": "user", "content": "你好"}],
     "temperature": 0.7,
-    "stream": false
-  }'
-```
-
-### qwen3-235b-a22b-test
-- 副本数: 1/1
-- 访问地址: `http://qwen3-235b-a22b-test.zzai2.scnet.cn:58000`
-- 模型信息:
-  - `/data/model/Qwen3-235B-A22B`
-    - 最大上下文长度: 32768
-- Anthropic 协议: ✅ 支持 (/v1/messages)
-
-#### 验证过的 curl 命令:
-**获取模型列表:**
-```bash
-curl -s http://qwen3-235b-a22b-test.zzai2.scnet.cn:58000/v1/models
-```
-
-**Chat Completions 测试:**
-```bash
-curl -X POST 'http://qwen3-235b-a22b-test.zzai2.scnet.cn:58000/v1/chat/completions' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model": "/data/model/Qwen3-235B-A22B",
-    "messages": [{"role": "user", "content": "你好"}],
-    "temperature": 0.7,
-    "stream": false
-  }'
-```
-
-**Anthropic Messages 测试:**
-```bash
-curl -X POST 'http://qwen3-235b-a22b-test.zzai2.scnet.cn:58000/v1/messages' \
-  -H 'Content-Type: application/json' \
-  -H 'anthropic-version: 2023-06-01' \
-  -d '{
-    "model": "/data/model/Qwen3-235B-A22B",
-    "max_tokens": 16,
-    "messages": [{"role": "user", "content": "你好"}],
     "stream": false
   }'
 ```

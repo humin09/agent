@@ -1,0 +1,292 @@
+#!/usr/bin/env python3
+"""
+Render manifests for the default KubeSphere user bootstrap flow.
+
+Default flow:
+- username = workspace = namespace
+- global role = platform-regular
+- workspace role = <username>-admin
+- namespace role = admin
+- granted clusters = requested clusters
+- namespace is marked as kubesphere-managed
+
+The script only renders manifests. It never deletes resources.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import subprocess
+import sys
+from typing import Iterable
+
+
+def build_user(username: str, email: str, password: str, clusters: list[str]) -> dict:
+    return {
+        "apiVersion": "iam.kubesphere.io/v1beta1",
+        "kind": "User",
+        "metadata": {
+            "name": username,
+            "annotations": {
+                "iam.kubesphere.io/globalrole": "platform-regular",
+                "iam.kubesphere.io/granted-clusters": ",".join(clusters),
+                "kubesphere.io/creator": "admin",
+            },
+        },
+        "spec": {
+            "email": email,
+            "password": password,
+        },
+    }
+
+
+def build_global_role_binding(username: str) -> dict:
+    return {
+        "apiVersion": "iam.kubesphere.io/v1beta1",
+        "kind": "GlobalRoleBinding",
+        "metadata": {
+            "name": f"{username}-platform-regular",
+            "labels": {
+                "iam.kubesphere.io/role-ref": "platform-regular",
+                "iam.kubesphere.io/user-ref": username,
+            },
+        },
+        "roleRef": {
+            "apiGroup": "iam.kubesphere.io",
+            "kind": "GlobalRole",
+            "name": "platform-regular",
+        },
+        "subjects": [
+            {
+                "apiGroup": "iam.kubesphere.io",
+                "kind": "User",
+                "name": username,
+            }
+        ],
+    }
+
+
+def build_workspace_template(username: str, clusters: list[str]) -> dict:
+    return {
+        "apiVersion": "tenant.kubesphere.io/v1beta1",
+        "kind": "WorkspaceTemplate",
+        "metadata": {
+            "name": username,
+            "annotations": {
+                "kubesphere.io/creator": "admin",
+            },
+        },
+        "spec": {
+            "placement": {
+                "clusters": [{"name": cluster} for cluster in clusters],
+            },
+            "template": {
+                "metadata": {
+                    "annotations": {
+                        "kubesphere.io/creator": "admin",
+                    }
+                },
+                "spec": {
+                    "manager": username,
+                },
+            },
+        },
+    }
+
+
+def build_workspace_role_binding(username: str) -> dict:
+    return {
+        "apiVersion": "iam.kubesphere.io/v1beta1",
+        "kind": "WorkspaceRoleBinding",
+        "metadata": {
+            "name": f"{username}-admin",
+            "labels": {
+                "iam.kubesphere.io/role-ref": f"{username}-admin",
+                "iam.kubesphere.io/user-ref": username,
+                "kubesphere.io/workspace": username,
+            },
+        },
+        "roleRef": {
+            "apiGroup": "iam.kubesphere.io",
+            "kind": "WorkspaceRole",
+            "name": f"{username}-admin",
+        },
+        "subjects": [
+            {
+                "apiGroup": "iam.kubesphere.io",
+                "kind": "User",
+                "name": username,
+            }
+        ],
+    }
+
+
+def build_namespace(username: str) -> dict:
+    return {
+        "apiVersion": "v1",
+        "kind": "Namespace",
+        "metadata": {
+            "name": username,
+            "labels": {
+                "kubernetes.io/metadata.name": username,
+                "kubesphere.io/managed": "true",
+                "kubesphere.io/workspace": username,
+            },
+            "annotations": {
+                "kubesphere.io/creator": "admin",
+            },
+        },
+    }
+
+
+def build_namespace_role_binding(username: str) -> dict:
+    return {
+        "apiVersion": "iam.kubesphere.io/v1beta1",
+        "kind": "RoleBinding",
+        "metadata": {
+            "name": f"{username}-admin",
+            "namespace": username,
+            "labels": {
+                "iam.kubesphere.io/role-ref": "admin",
+                "iam.kubesphere.io/user-ref": username,
+            },
+        },
+        "roleRef": {
+            "apiGroup": "iam.kubesphere.io",
+            "kind": "Role",
+            "name": "admin",
+        },
+        "subjects": [
+            {
+                "apiGroup": "iam.kubesphere.io",
+                "kind": "User",
+                "name": username,
+            }
+        ],
+    }
+
+
+def render_documents(documents: Iterable[dict], stream) -> None:
+    first = True
+    for document in documents:
+        if not first:
+            stream.write("---\n")
+        json.dump(document, stream, indent=2, ensure_ascii=True)
+        stream.write("\n")
+        first = False
+
+
+def resource_ref(document: dict) -> tuple[str, str]:
+    api_version = document["apiVersion"]
+    kind = document["kind"]
+
+    if api_version == "v1" and kind == "Namespace":
+        return ("namespaces", document["metadata"]["name"])
+    if api_version == "iam.kubesphere.io/v1beta1" and kind == "User":
+        return ("users.iam.kubesphere.io", document["metadata"]["name"])
+    if api_version == "iam.kubesphere.io/v1beta1" and kind == "GlobalRoleBinding":
+        return ("globalrolebindings.iam.kubesphere.io", document["metadata"]["name"])
+    if api_version == "tenant.kubesphere.io/v1beta1" and kind == "WorkspaceTemplate":
+        return ("workspacetemplates.tenant.kubesphere.io", document["metadata"]["name"])
+    if api_version == "iam.kubesphere.io/v1beta1" and kind == "WorkspaceRoleBinding":
+        return ("workspacerolebindings.iam.kubesphere.io", document["metadata"]["name"])
+    if api_version == "iam.kubesphere.io/v1beta1" and kind == "RoleBinding":
+        return ("rolebindings.iam.kubesphere.io -n " + document["metadata"]["namespace"], document["metadata"]["name"])
+    raise ValueError(f"Unsupported resource: {api_version} {kind}")
+
+
+def resource_exists(context: str, document: dict) -> bool:
+    resource, name = resource_ref(document)
+    cmd = ["kubectl", "--context", context, "get"]
+    cmd.extend(resource.split())
+    cmd.append(name)
+    completed = subprocess.run(
+        cmd,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+        text=False,
+    )
+    return completed.returncode == 0
+
+
+def filter_existing(context: str, documents: list[dict], verbose: bool) -> list[dict]:
+    pending: list[dict] = []
+    for document in documents:
+        if resource_exists(context, document):
+            if verbose:
+                namespace = document["metadata"].get("namespace")
+                scope = f" namespace={namespace}" if namespace else ""
+                print(
+                    f"skip existing: {document['kind']} name={document['metadata']['name']}{scope}",
+                    file=sys.stderr,
+                )
+            continue
+        pending.append(document)
+    return pending
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Render manifests for the default KubeSphere user bootstrap flow."
+    )
+    parser.add_argument("--username", required=True, help="Username, workspace, and namespace name")
+    parser.add_argument("--email", required=True, help="User email")
+    parser.add_argument("--password", required=True, help="Initial plaintext password")
+    parser.add_argument(
+        "--cluster",
+        action="append",
+        dest="clusters",
+        default=[],
+        help="Target KubeSphere cluster name. Repeatable.",
+    )
+    parser.add_argument("--output", help="Write manifests to file instead of stdout")
+    parser.add_argument("--context", help="kubectl context used with --skip-existing")
+    parser.add_argument(
+        "--skip-existing",
+        action="store_true",
+        help="Probe the cluster and skip resources that already exist",
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Print skipped resources to stderr when --skip-existing is used",
+    )
+    return parser.parse_args()
+
+
+def validate_args(args: argparse.Namespace) -> None:
+    if not args.clusters:
+        raise SystemExit("at least one --cluster is required")
+    if args.skip_existing and not args.context:
+        raise SystemExit("--context is required when --skip-existing is set")
+
+
+def main() -> int:
+    args = parse_args()
+    validate_args(args)
+
+    documents: list[dict] = [
+        build_user(args.username, args.email, args.password, args.clusters),
+        build_global_role_binding(args.username),
+        build_workspace_template(args.username, args.clusters),
+        build_workspace_role_binding(args.username),
+        build_namespace(args.username),
+        build_namespace_role_binding(args.username),
+    ]
+
+    if args.skip_existing:
+        documents = filter_existing(args.context, documents, args.verbose)
+
+    if args.output:
+        with open(args.output, "w", encoding="utf-8") as handle:
+            render_documents(documents, handle)
+    else:
+        render_documents(documents, sys.stdout)
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

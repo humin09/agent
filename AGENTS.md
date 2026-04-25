@@ -33,6 +33,9 @@ globs: ["**/*"]
 - 严禁直接 SSH 到集群节点，必须优先 `kubectl node-shell --context <别名> <节点IP> [-- <command>]`.
 - 仅当目标节点 `NotReady/Cordon`，才可通过 kubeasz 跳板 SSH 中转.
 5. 本地和节点文件传输强制使用 `~/agent/scripts/k8s_scp.py` 来进行本地和k8s节点.
+6. 从 K8s 节点访问外网是强制走 `http/https` 代理的。
+- 凡在节点内执行 `curl` / `wget` / `docker pull` / 包管理器 / 脚本下载 / API 调用等外网访问，必须显式带代理或提前设置 `http_proxy`、`https_proxy`。
+- 未确认代理前，不得假设节点可直连外网。
 
 
 ### 2.2 安全规则（强制）
@@ -114,6 +117,23 @@ node-shell命令例外：
 
 生产集群：`ks`、`qd`、`dz`、`zz`、`ny`、`wh`、`sz`、`wq`
 测试集群：`tj`、`bj`、`sh`、`ly`
+
+节点外网代理基线（强制）：
+
+| 别名 | 城市 | 节点外网代理 |
+|------|------|--------------|
+| `ks` | 昆山 | `10.15.100.43:3120` |
+| `qd` | 青岛 | `10.1.4.13:3120` |
+| `sz` | 深圳 | `10.1.100.10:3120` |
+| `wq` | 魏桥 | `10.10.1.3:3128` |
+| `zz` | 郑州 | `10.13.17.166:3128` |
+| `dz` | 达州 | `10.1.100.10:3120` |
+
+节点访问外网时的推荐写法：
+```bash
+export http_proxy=http://<user>:<pass>@<代理IP>:<端口>
+export https_proxy=$http_proxy
+```
 
 ### 3.3 架构底座
 
@@ -238,6 +258,17 @@ docker push image.ac.com:5000/k8s/<镜像名>:<tag>
 2. 明确可能的风险和具体执行步骤，并得到主人确认.
 3. 实施变更并监控状态，若有异常立即通知主人，由主人决定回滚或调整方案.
 4. 对实施方案进行测试验证，确保最终效果符合预期.
+
+回滚保护规则（强制）：
+- 严禁对包含 `Namespace` 资源的整包 YAML 直接执行 `kubectl delete -f <file>` 作为回滚手段。
+- 严禁把 `Namespace`、`CRD`、`PV` 等高影响资源与普通工作负载写在同一个“可直接 delete 回滚”的 YAML 中。
+- 回滚前必须先检查文件内容：
+```bash
+kubectl --context <别名> -n <namespace> diff -f <file>
+grep -n "^kind: Namespace$\\|^kind: CustomResourceDefinition$\\|^kind: PersistentVolume$" <file>
+```
+- 需要回滚时，优先按资源类型或资源名精确删除，例如仅删除 `Deployment`、`Service`、`Ingress`，不要删除命名空间容器对象本身。
+- 若发布 YAML 必须包含 `Namespace`，则应拆分为“基础资源文件”和“业务工作负载文件”；回滚只允许针对工作负载文件执行，不得对基础资源文件执行 `delete -f`。
 
 ## Part 4: 技能仓库同步快捷指令
 
