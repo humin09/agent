@@ -5,6 +5,7 @@ Render manifests for the default KubeSphere user bootstrap flow.
 Default flow:
 - username = workspace = namespace
 - global role = platform-regular
+- cluster role = cluster-viewer
 - workspace role = <username>-admin
 - namespace role = admin
 - granted clusters = requested clusters
@@ -92,6 +93,32 @@ def build_workspace_template(username: str, clusters: list[str]) -> dict:
                 },
             },
         },
+    }
+
+
+def build_cluster_role_binding(username: str) -> dict:
+    return {
+        "apiVersion": "iam.kubesphere.io/v1beta1",
+        "kind": "ClusterRoleBinding",
+        "metadata": {
+            "name": f"{username}-cluster-viewer",
+            "labels": {
+                "iam.kubesphere.io/role-ref": "cluster-viewer",
+                "iam.kubesphere.io/user-ref": username,
+            },
+        },
+        "roleRef": {
+            "apiGroup": "iam.kubesphere.io",
+            "kind": "ClusterRole",
+            "name": "cluster-viewer",
+        },
+        "subjects": [
+            {
+                "apiGroup": "iam.kubesphere.io",
+                "kind": "User",
+                "name": username,
+            }
+        ],
     }
 
 
@@ -187,6 +214,8 @@ def resource_ref(document: dict) -> tuple[str, str]:
         return ("users.iam.kubesphere.io", document["metadata"]["name"])
     if api_version == "iam.kubesphere.io/v1beta1" and kind == "GlobalRoleBinding":
         return ("globalrolebindings.iam.kubesphere.io", document["metadata"]["name"])
+    if api_version == "iam.kubesphere.io/v1beta1" and kind == "ClusterRoleBinding":
+        return ("clusterrolebindings.iam.kubesphere.io", document["metadata"]["name"])
     if api_version == "tenant.kubesphere.io/v1beta1" and kind == "WorkspaceTemplate":
         return ("workspacetemplates.tenant.kubesphere.io", document["metadata"]["name"])
     if api_version == "iam.kubesphere.io/v1beta1" and kind == "WorkspaceRoleBinding":
@@ -270,6 +299,7 @@ def main() -> int:
     documents: list[dict] = [
         build_user(args.username, args.email, args.password, args.clusters),
         build_global_role_binding(args.username),
+        build_cluster_role_binding(args.username),
         build_workspace_template(args.username, args.clusters),
         build_workspace_role_binding(args.username),
         build_namespace(args.username),
