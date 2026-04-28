@@ -29,7 +29,7 @@ uv run /Users/humin/.config/opencode/skills/maas/probe_models.py
 - 生成包含验证过的 curl 命令的 markdown 报告
 
 **输出文件：**
-- `/Users/humin/.config/opencode/skills/maas/probe_models.md` - 模型探测报告
+- `/Users/humin/.config/opencode/skills/maas/available_models.md` - 模型探测报告
 
 ### maas_test.py
 Maas vLLM 单配置压测脚本，只负责压测当前 deployment 现有配置，不修改启动参数。

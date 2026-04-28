@@ -33,7 +33,8 @@ globs: ["**/*"]
 - 严禁直接 SSH 到集群节点，必须优先 `kubectl node-shell --context <别名> <节点IP> [-- <command>]`.
 - 仅当目标节点 `NotReady/Cordon`，才可通过 kubeasz 跳板 SSH 中转.
 5. 本地和节点文件传输强制使用 `~/agent/scripts/k8s_scp.py` 来进行本地和k8s节点.
-6. 从 K8s 节点访问外网是强制走 `http/https` 代理的。
+6. 查询 Codex 当日额度时，优先使用 `~/agent/scripts/codex_quota.py`，避免重复手工打开统计页.
+7. 从 K8s 节点访问外网是强制走 `http/https` 代理的。
 - 凡在节点内执行 `curl` / `wget` / `docker pull` / 包管理器 / 脚本下载 / API 调用等外网访问，必须显式带代理或提前设置 `http_proxy`、`https_proxy`。
 - 未确认代理前，不得假设节点可直连外网。
 
@@ -278,3 +279,19 @@ grep -n "^kind: Namespace$\\|^kind: CustomResourceDefinition$\\|^kind: Persisten
    - `git add -A && git diff --cached --quiet || git commit -m “chore: update skills”`（先提交本地改动，无改动则跳过）
    - `git pull --rebase`
    - `git push`
+
+## Part 5: 本地快捷脚本
+
+### 5.1 Codex 额度查询
+
+- 脚本：`~/agent/scripts/codex_quota.py`
+- 用途：通过供应商接口直接查询 Codex 卡密当日已用额度、剩余额度和剩余百分比。
+- 默认行为：默认绕过本机 `http_proxy` / `https_proxy` / `all_proxy`，避免 Clash 代理导致目标域名握手异常。
+- 每日额度默认按 `90` 计算；若供应商后续调整额度，可通过 `--daily-quota <值>` 覆盖。
+
+示例：
+```bash
+python ~/agent/scripts/codex_quota.py --card <激活码>
+python ~/agent/scripts/codex_quota.py --card <激活码> --json
+CODEX_CARD=<激活码> python ~/agent/scripts/codex_quota.py
+```

@@ -1,9 +1,17 @@
 #!/usr/bin/env python3
-import subprocess
-import requests
 import json
-from datetime import datetime
+import subprocess
 import time
+from datetime import datetime
+
+import requests
+
+
+OUTPUT_FILE = "/Users/humin/.config/opencode/skills/maas/available_models.md"
+CLUSTERS = [
+    {"name": "昆山", "context": "ks", "namespace": "ske-model"},
+    {"name": "郑州", "context": "zz", "namespace": "ske-model"},
+]
 
 
 def get_k8s_resources(context, namespace):
@@ -14,7 +22,7 @@ def get_k8s_resources(context, namespace):
         "-n",
         namespace,
         "get",
-        "deploy,svc,ingress",
+        "deploy,svc,ingress,endpoints,pod",
         "-o",
         "json",
     ]
@@ -25,141 +33,369 @@ def get_k8s_resources(context, namespace):
     return json.loads(result.stdout)
 
 
-def probe_url(url, timeout=10, retries=3, retry_interval=2):
+def probe_url(url, timeout=6, retries=2, retry_interval=1):
     for attempt in range(retries):
         try:
-            response = requests.get(url, timeout=timeout)
-            return response
+            return requests.get(url, timeout=timeout)
         except Exception:
             if attempt < retries - 1:
                 time.sleep(retry_interval)
     return None
 
 
-def probe_json_post(url, payload, timeout=30, headers=None, retries=3, retry_interval=2):
+def probe_json_post(url, payload, timeout=5, headers=None, retries=1, retry_interval=1):
     for attempt in range(retries):
         try:
-            response = requests.post(url, json=payload, timeout=timeout, headers=headers)
-            return response
+            return requests.post(url, json=payload, timeout=timeout, headers=headers)
         except Exception:
             if attempt < retries - 1:
                 time.sleep(retry_interval)
     return None
+
+
+def is_subset(expected, actual):
+    if not expected:
+        return False
+    return all(actual.get(k) == v for k, v in expected.items())
+
+
+def base_name(host):
+    return host.split(".", 1)[0] if host else ""
+
+
+def host_sort_key(host, deploy_name):
+    name = base_name(host)
+    return (
+        0 if name == deploy_name else 1,
+        0 if name.startswith(deploy_name) else 1,
+        len(name),
+        name,
+    )
+
+
+def pick_primary_host(hosts, deploy_name):
+    if not hosts:
+        return None
+    return sorted(hosts, key=lambda host: host_sort_key(host, deploy_name))[0]
+
+
+def parse_resources(resources):
+    deployments = {}
+    services = {}
+    ingresses = []
+    endpoints = {}
+    pods = {}
+
+    for item in resources.get("items", []):
+        kind = item.get("kind")
+        metadata = item.get("metadata", {})
+        name = metadata.get("name")
+
+        if kind == "Deployment":
+            deployments[name] = {
+                "name": name,
+                "replicas": item.get("spec", {}).get("replicas", 0),
+                "available": item.get("status", {}).get("availableReplicas", 0),
+                "selector": item.get("spec", {}).get("selector", {}).get("matchLabels", {}),
+                "template_labels": item.get("spec", {})
+                .get("template", {})
+                .get("metadata", {})
+                .get("labels", {}),
+                "hosts": set(),
+                "routes": [],
+            }
+        elif kind == "Service":
+            services[name] = {
+                "name": name,
+                "selector": item.get("spec", {}).get("selector", {}) or {},
+                "labels": metadata.get("labels", {}) or {},
+            }
+        elif kind == "Ingress":
+            for rule in item.get("spec", {}).get("rules", []):
+                host = rule.get("host")
+                for path in rule.get("http", {}).get("paths", []):
+                    svc_name = path.get("backend", {}).get("service", {}).get("name")
+                    if host and svc_name:
+                        ingresses.append(
+                            {
+                                "ingress_name": name,
+                                "host": host,
+                                "service_name": svc_name,
+                            }
+                        )
+        elif kind == "Endpoints":
+            pod_names = []
+            for subset in item.get("subsets", []) or []:
+                for address in subset.get("addresses", []) or []:
+                    target_ref = address.get("targetRef", {}) or {}
+                    if target_ref.get("kind") == "Pod" and target_ref.get("name"):
+                        pod_names.append(target_ref["name"])
+            endpoints[name] = pod_names
+        elif kind == "Pod":
+            pods[name] = metadata.get("labels", {}) or {}
+
+    return deployments, services, ingresses, endpoints, pods
+
+
+def match_deployments_by_pod_labels(pod_labels, deployments):
+    matches = []
+    for deploy in deployments.values():
+        if is_subset(deploy["selector"], pod_labels):
+            matches.append(deploy["name"])
+    return matches
+
+
+def match_deployments_by_service(service, deployments, pods):
+    matches = set()
+    selector = service.get("selector", {})
+
+    if service["name"] in deployments:
+        matches.add(service["name"])
+
+    for deploy in deployments.values():
+        if selector and (
+            is_subset(selector, deploy["selector"])
+            or is_subset(selector, deploy["template_labels"])
+        ):
+            matches.add(deploy["name"])
+
+    if selector:
+        for pod_labels in pods.values():
+            if is_subset(selector, pod_labels):
+                matches.update(match_deployments_by_pod_labels(pod_labels, deployments))
+
+    matches.update(match_deployments_by_name_candidates(service, deployments))
+    return sorted(matches)
+
+
+def match_deployments_by_name_candidates(service, deployments):
+    matches = set()
+    selector = service.get("selector", {})
+    labels = service.get("labels", {})
+
+    name_candidates = {
+        service["name"],
+        labels.get("app"),
+        labels.get("model"),
+        selector.get("app"),
+        selector.get("model"),
+    }
+    name_candidates = {candidate for candidate in name_candidates if candidate}
+
+    for candidate in name_candidates:
+        if candidate in deployments:
+            matches.add(candidate)
+        for suffix in ("-head-1", "-1"):
+            alias = f"{candidate}{suffix}"
+            if alias in deployments:
+                matches.add(alias)
+
+    return sorted(matches)
+
+
+def build_service_records(deployments, services, ingresses, endpoints, pods):
+    service_routes = {}
+    for route in ingresses:
+        service_routes.setdefault(route["service_name"], []).append(route)
+
+    records = []
+    matched_deployments = set()
+    service_names = sorted(
+        services,
+        key=lambda name: (0 if service_routes.get(name) else 1, name),
+    )
+
+    for service_name in service_names:
+        service = services[service_name]
+        service_matched = set()
+
+        for pod_name in endpoints.get(service_name, []):
+            pod_labels = pods.get(pod_name, {})
+            service_matched.update(match_deployments_by_pod_labels(pod_labels, deployments))
+
+        if service_matched:
+            # Head/worker 模式下，endpoints 往往只落到 head pod；
+            # 这里仅按命名别名补全 worker deployment，避免把 sibling 服务串到一起。
+            service_matched.update(match_deployments_by_name_candidates(service, deployments))
+        else:
+            service_matched.update(match_deployments_by_service(service, deployments, pods))
+
+        routes = service_routes.get(service_name, [])
+        if not routes and not service_matched:
+            continue
+        if not routes and service_matched.issubset(matched_deployments):
+            continue
+
+        matched_deployments.update(service_matched)
+        sorted_deployments = sorted(service_matched)
+        replicas = sum(deployments[name]["replicas"] for name in sorted_deployments)
+        available = sum(deployments[name]["available"] for name in sorted_deployments)
+        hosts = sorted(
+            {route["host"] for route in routes},
+            key=lambda host: host_sort_key(host, service_name),
+        )
+
+        records.append(
+            {
+                "name": service_name,
+                "service_name": service_name,
+                "deployment_names": sorted_deployments,
+                "replicas": replicas,
+                "available": available,
+                "hosts": hosts,
+            }
+        )
+
+    for deploy_name, deploy in deployments.items():
+        if deploy_name in matched_deployments:
+            continue
+        records.append(
+            {
+                "name": deploy_name,
+                "service_name": None,
+                "deployment_names": [deploy_name],
+                "replicas": deploy["replicas"],
+                "available": deploy["available"],
+                "hosts": [],
+            }
+        )
+
+    records.sort(key=lambda item: item["name"])
+    return records
+
+
+def collect_cluster_data(cluster):
+    resources = get_k8s_resources(cluster["context"], cluster["namespace"])
+    if not resources:
+        return {"records": []}
+
+    deployments, services, ingresses, endpoints, pods = parse_resources(resources)
+    records = build_service_records(deployments, services, ingresses, endpoints, pods)
+    return {"records": records}
+
+
+def probe_host_details(url_prefix):
+    details = {
+        "url_prefix": url_prefix,
+        "models_ok": False,
+        "models_status": None,
+        "models": [],
+        "first_model": "",
+        "anthropic_supported": False,
+        "anthropic_status": "未探测",
+    }
+
+    model_response = probe_url(f"{url_prefix}/v1/models")
+    if model_response is None:
+        details["models_status"] = "Connection failed"
+        return details
+
+    details["models_status"] = model_response.status_code
+    if model_response.status_code != 200:
+        return details
+
+    try:
+        model_data = model_response.json()
+    except Exception:
+        details["models_status"] = "Invalid JSON"
+        return details
+
+    models = model_data.get("data", [])
+    details["models_ok"] = True
+    details["models"] = models
+    if models:
+        details["first_model"] = models[0].get("id", "")
+
+    if details["first_model"]:
+        anthropic_payload = {
+            "model": details["first_model"],
+            "max_tokens": 1,
+            "messages": [{"role": "user", "content": "你好"}],
+            "stream": False,
+        }
+        anthropic_headers = {
+            "Content-Type": "application/json",
+            "anthropic-version": "2023-06-01",
+        }
+        anthropic_response = probe_json_post(
+            f"{url_prefix}/v1/messages",
+            anthropic_payload,
+            headers=anthropic_headers,
+        )
+        if anthropic_response and anthropic_response.status_code == 200:
+            details["anthropic_supported"] = True
+            details["anthropic_status"] = "✅"
+        else:
+            details["anthropic_status"] = "❌"
+
+    return details
+
+
+def render_host_probe(md, probe):
+    url_prefix = probe["url_prefix"]
+    if probe["models_ok"]:
+        return md + f"- {url_prefix}:/v1/models ✅\n"
+    return md + f"- {url_prefix}:/v1/models ❌\n"
 
 
 def generate_markdown(clusters_data):
-    md = f"# ske-model 可用模型列表\n"
-    md += f"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+    md = ""
 
-    for cluster_name, data in clusters_data.items():
-        md += f"## {cluster_name} 集群\n\n"
-
-        if not data["deployments"]:
-            md += "暂无 deployment 资源\n\n"
+    for _, data in clusters_data.items():
+        if not data["records"]:
             continue
 
-        for deploy in data["deployments"]:
-            md += f"### {deploy['name']}\n"
-            md += f"- 副本数: {deploy['replicas']}/{deploy['available']}\n"
+        for record in data["records"]:
+            md += f"{record['name']}\n"
 
-            if deploy["host"]:
-                host = deploy["host"]
-                url_prefix = f"http://{host}:58000"
+            if not record["hosts"]:
+                md += "- /v1/models ❌\n"
+                md += f"- 副本数{record['replicas']}/{record['available']}\n\n"
+                continue
 
-                md += f"- 访问地址: `{url_prefix}`\n"
+            probes = []
+            for host in record["hosts"]:
+                probes.append(probe_host_details(f"http://{host}:58000"))
 
-                model_response = probe_url(f"{url_prefix}/v1/models")
-                if model_response and model_response.status_code == 200:
-                    try:
-                        model_data = model_response.json()
-                        models = model_data.get("data", [])
-                        first_model = models[0].get("id", "") if models else ""
+            primary_host = pick_primary_host(record["hosts"], record["name"])
+            primary_probe = None
+            if primary_host:
+                primary_url = f"http://{primary_host}:58000"
+                primary_probe = next(
+                    (probe for probe in probes if probe["url_prefix"] == primary_url),
+                    None,
+                )
 
-                        md += f"- 模型信息:\n"
-                        for model in models:
-                            model_id = model["id"]
-                            md += f"  - `{model_id}`\n"
-                            md += f"    - 最大上下文长度: {model.get('max_model_len', 'N/A')}\n"
-
-                        anthropic_supported = False
-                        anthropic_status = "未探测"
-                        if first_model:
-                            anthropic_payload = {
-                                "model": first_model,
-                                "max_tokens": 1,
-                                "messages": [{"role": "user", "content": "你好"}],
-                                "stream": False,
-                            }
-                            anthropic_headers = {
-                                "Content-Type": "application/json",
-                                "anthropic-version": "2023-06-01",
-                            }
-                            anthropic_response = probe_json_post(
-                                f"{url_prefix}/v1/messages",
-                                anthropic_payload,
-                                headers=anthropic_headers,
-                            )
-                            if anthropic_response and anthropic_response.status_code == 200:
-                                anthropic_supported = True
-                                anthropic_status = "✅ 支持 (/v1/messages)"
-                            else:
-                                status_code = (
-                                    anthropic_response.status_code
-                                    if anthropic_response
-                                    else "Connection failed"
-                                )
-                                anthropic_status = (
-                                    f"❌ 不支持或探测失败 (HTTP {status_code})"
-                                )
-
-                        md += f"- Anthropic 协议: {anthropic_status}\n"
-                        md += f"\n#### 验证过的 curl 命令:\n"
-                        md += f"**获取模型列表:**\n"
-                        md += f"```bash\n"
-                        md += f"curl -s {url_prefix}/v1/models\n"
-                        md += f"```\n"
-
-                        if first_model:
-                            md += f"\n**Chat Completions 测试:**\n"
-                            md += f"```bash\n"
-                            md += (
-                                f"curl -X POST '{url_prefix}/v1/chat/completions' \\\n"
-                            )
-                            md += f"  -H 'Content-Type: application/json' \\\n"
-                            md += f"  -d '{{\n"
-                            md += f'    "model": "{first_model}",\n'
-                            md += f'    "messages": [{{"role": "user", "content": "你好"}}],\n'
-                            md += f'    "temperature": 0.7,\n'
-                            md += f'    "stream": false\n'
-                            md += f"  }}'\n"
-                            md += f"```\n"
-
-                            if anthropic_supported:
-                                md += f"\n**Anthropic Messages 测试:**\n"
-                                md += f"```bash\n"
-                                md += f"curl -X POST '{url_prefix}/v1/messages' \\\n"
-                                md += f"  -H 'Content-Type: application/json' \\\n"
-                                md += (
-                                    f"  -H 'anthropic-version: 2023-06-01' \\\n"
-                                )
-                                md += f"  -d '{{\n"
-                                md += f'    "model": "{first_model}",\n'
-                                md += f'    "max_tokens": 16,\n'
-                                md += f'    "messages": [{{"role": "user", "content": "你好"}}],\n'
-                                md += f'    "stream": false\n'
-                                md += f"  }}'\n"
-                                md += f"```\n"
-                    except:
-                        md += f"- 模型信息: ❌ 无法解析响应\n"
-                else:
-                    status_code = (
-                        model_response.status_code
-                        if model_response
-                        else "Connection failed"
-                    )
-                    md += f"- 模型信息: ❌ 无法访问 (HTTP {status_code})\n"
+            successful_probe = next((probe for probe in probes if probe["models_ok"]), primary_probe)
+            if successful_probe and successful_probe["models_ok"]:
+                md = render_host_probe(md, successful_probe)
+                md += f"- Anthropic 协议: {successful_probe['anthropic_status']}\n"
+                first_model = successful_probe["first_model"]
+                first_max_len = "N/A"
+                if successful_probe["models"]:
+                    first_max_len = successful_probe["models"][0].get("max_model_len", "N/A")
+                md += f"- 模型信息: {first_model}\n"
+                md += f"- 模型最大上下文长度: {first_max_len}\n"
+                md += f"- 副本数{record['replicas']}/{record['available']}\n"
+                if first_model:
+                    md += "请求示例:\n"
+                    md += "```bash\n"
+                    md += f"curl -X POST '{successful_probe['url_prefix']}/v1/chat/completions' \\\n"
+                    md += "  -H 'Content-Type: application/json' \\\n"
+                    md += "  -d '{\n"
+                    md += f'    "model": "{first_model}",\n'
+                    md += '    "messages": [{"role": "user", "content": "你好"}],\n'
+                    md += '    "temperature": 0.7,\n'
+                    md += '    "stream": false\n'
+                    md += "  }'\n"
+                    md += "```\n"
             else:
-                md += f"- 模型信息: ❌ 无对应 ingress\n"
+                fallback_probe = primary_probe or probes[0]
+                md = render_host_probe(md, fallback_probe)
+                md += "- Anthropic 协议: ❌\n"
+                md += "- 模型信息: ❌\n"
+                md += "- 模型最大上下文长度: N/A\n"
+                md += f"- 副本数{record['replicas']}/{record['available']}\n"
 
             md += "\n"
 
@@ -167,77 +403,16 @@ def generate_markdown(clusters_data):
 
 
 def main():
-    clusters = [
-        {"name": "昆山", "context": "ks", "namespace": "ske-model"},
-        {"name": "郑州", "context": "zz", "namespace": "ske-model"},
-    ]
-
     clusters_data = {}
-
-    for cluster in clusters:
-        resources = get_k8s_resources(cluster["context"], cluster["namespace"])
-        if not resources:
-            continue
-
-        deployments = {}
-        services = {}
-        ingresses = []
-
-        for item in resources.get("items", []):
-            if item.get("kind") == "Deployment":
-                name = item["metadata"]["name"]
-                replicas = item.get("spec", {}).get("replicas", 0)
-                available = item.get("status", {}).get("availableReplicas", 0)
-                selector = (
-                    item.get("spec", {}).get("selector", {}).get("matchLabels", {})
-                )
-                deployments[name] = {
-                    "name": name,
-                    "replicas": replicas,
-                    "available": available,
-                    "selector": selector,
-                    "host": None,
-                }
-            elif item.get("kind") == "Service":
-                name = item["metadata"]["name"]
-                selector = item.get("spec", {}).get("selector", {})
-                services[name] = selector
-            elif item.get("kind") == "Ingress":
-                for rule in item.get("spec", {}).get("rules", []):
-                    host = rule.get("host")
-                    if host:
-                        for path in rule.get("http", {}).get("paths", []):
-                            svc_name = (
-                                path.get("backend", {}).get("service", {}).get("name")
-                            )
-                            if svc_name:
-                                ingresses.append(
-                                    {"host": host, "service_name": svc_name}
-                                )
-
-        for ingress in ingresses:
-            svc_name = ingress["service_name"]
-            if svc_name in services:
-                svc_selector = services[svc_name]
-                for deploy_name, deploy in deployments.items():
-                    deploy_selector = deploy["selector"]
-                    match = True
-                    for k, v in svc_selector.items():
-                        if deploy_selector.get(k) != v:
-                            match = False
-                            break
-                    if match:
-                        deployments[deploy_name]["host"] = ingress["host"]
-
-        clusters_data[cluster["name"]] = {"deployments": list(deployments.values())}
+    for cluster in CLUSTERS:
+        clusters_data[cluster["name"]] = collect_cluster_data(cluster)
 
     markdown = generate_markdown(clusters_data)
 
-    output_file = "/Users/humin/.config/opencode/skills/maas/available_models.md"
-    with open(output_file, "w", encoding="utf-8") as f:
-        f.write(markdown)
+    with open(OUTPUT_FILE, "w", encoding="utf-8") as file_obj:
+        file_obj.write(markdown)
 
-    print(f"报告已生成: {output_file}")
+    print(f"报告已生成: {OUTPUT_FILE}")
     print("\n" + markdown)
 
 
