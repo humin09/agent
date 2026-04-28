@@ -295,3 +295,24 @@ python ~/agent/scripts/codex_quota.py --card <激活码>
 python ~/agent/scripts/codex_quota.py --card <激活码> --json
 CODEX_CARD=<激活码> python ~/agent/scripts/codex_quota.py
 ```
+
+### 5.2 Agent 会话临时文件清理
+
+- 脚本：`~/agent/scripts/agent_state_cleanup.py`
+- 用途：保守清理 `~/.codex`、`~/.claude`、`~/.opencode` / `~/.config/opencode` 下的旧会话产物、缓存、临时目录，不触碰认证、配置、主状态库等关键文件。
+- 默认行为：`dry-run`，只展示将清理的对象和可回收空间；仅在显式加 `--apply` 时执行删除。
+- 当前策略：
+  - Codex：旧 `sessions`、`shell_snapshots`、`.tmp/tmp`、`ambient-suggestions`
+  - Claude：旧 `projects` 会话 `jsonl`、`tool-results`、`subagents`、`session-env`、`file-history`、`paste-cache`、`telemetry`
+  - Opencode：仅清理已知 `tmp/cache/logs/sessions` 类目录；不碰 `node_modules`、包清单和配置
+- 建议周期：
+  - 每周执行一次 `dry-run`
+  - 每 2~4 周执行一次 `--apply`
+  - 大版本升级前后额外执行一次 `dry-run` 观察目录变化
+
+示例：
+```bash
+python ~/agent/scripts/agent_state_cleanup.py
+python ~/agent/scripts/agent_state_cleanup.py --verbose
+python ~/agent/scripts/agent_state_cleanup.py --products codex claude --apply
+```

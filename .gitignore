@@ -41,3 +41,6 @@ yarn.lock
 pnpm-lock.yaml
 .npm/
 .yarn/
+
+# Runtime logs
+logs/
