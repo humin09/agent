@@ -939,10 +939,10 @@ def print_benchmark_summary(args: argparse.Namespace, title: str, extra_lines: O
     print(title)
     print("=" * 100)
     print(f"Context: {args.context}")
-    print(f"Namespace: {DEFAULT_NAMESPACE}")
+    print(f"Namespace: {args.namespace}")
     print(f"{target_label}: {target_value}")
     print(f"Model: {args.model or '(auto-detect)'}")
-    print(f"Metrics namespace: {DEFAULT_NAMESPACE}")
+    print(f"Metrics namespace: {args.metrics_namespace}")
     print(f"Metrics service: {metrics_service}")
     print(f"Token lengths: {args.token_lengths}")
     print(f"Cache rates: {args.cache_rates}")
@@ -987,7 +987,7 @@ async def run_benchmark_matrix(
 ) -> Dict[str, Any]:
     model = resolve_model(args, base_url)
     thanos_queries = build_default_thanos_queries(
-        metrics_namespace=DEFAULT_NAMESPACE,
+        metrics_namespace=args.metrics_namespace,
         pod_regex=pod_regex,
     )
     thanos_queries.update({name: [promql] for name, promql in parse_named_queries(args.thanos_query).items()})
@@ -1194,7 +1194,9 @@ examples:
 """,
     )
     parser.add_argument("--context", default="zz", help="kubectl context alias")
-    parser.add_argument("--pod", required=True, help="target pod name in ske-model namespace")
+    parser.add_argument("--namespace", default=DEFAULT_NAMESPACE, help="target pod namespace")
+    parser.add_argument("--metrics-namespace", default=None, help="metrics namespace; defaults to --namespace")
+    parser.add_argument("--pod", required=True, help="target pod name")
     parser.add_argument(
         "--model",
         default=None,
@@ -1299,6 +1301,8 @@ examples:
         help="local port for pod port-forward; 0 means auto-select",
     )
     args = parser.parse_args()
+    if not args.metrics_namespace:
+        args.metrics_namespace = args.namespace
     args.deployment_name = args.pod
     args.metrics_service = args.pod
     args.base_url = None
@@ -1308,9 +1312,9 @@ examples:
 
 
 async def orchestrate(args: argparse.Namespace):
-    pod_json = ensure_pod_ready(args.context, args.pod)
+    pod_json = ensure_pod_ready(args.context, args.pod, args.namespace)
     local_port = choose_local_port(args.local_port)
-    session = PortForwardSession(args.context, args.pod, local_port)
+    session = PortForwardSession(args.context, args.pod, local_port, args.namespace)
     session.start()
     try:
         if args.warmup_seconds > 0:
@@ -1334,11 +1338,11 @@ async def orchestrate(args: argparse.Namespace):
             result_prefix={
                 "target": {
                     "context": args.context,
-                    "namespace": DEFAULT_NAMESPACE,
+                    "namespace": args.namespace,
                     "pod": args.pod,
                     "node_name": pod_json.get("spec", {}).get("nodeName"),
                     "thanos_context": args.thanos_context or args.context,
-                    "metrics_namespace": DEFAULT_NAMESPACE,
+                    "metrics_namespace": args.metrics_namespace,
                     "metrics_service": args.pod,
                     "mode": "single-pod",
                     "base_url": base_url,

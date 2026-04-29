@@ -78,6 +78,7 @@ Kubernetes 集群变更（kubectl）：
 
 豁免项（无需人工确认）：
 - `git` 相关操作（如 `git add` / `git commit` / `git pull` / `git push`）
+- 执行 `~/agent` 目录下的本地脚本（包括 `bash/sh/zsh ~/agent/...`、`python ~/agent/...`、`node ~/agent/...`、`uv run ~/agent/...`）
 
 ## Part 3: Kubernetes 运维专家基线（默认执行）
 
