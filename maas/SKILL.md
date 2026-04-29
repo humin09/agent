@@ -32,47 +32,32 @@ uv run /Users/humin/.config/opencode/skills/maas/probe_models.py
 - `/Users/humin/.config/opencode/skills/maas/available_models.md` - 模型探测报告
 
 ### maas_test.py
-Maas vLLM 单配置压测脚本，只负责压测当前 deployment 现有配置，不修改启动参数。
-- deployment 和指标命名空间固定为 `ske-model`
-- 会先确认 deployment 就绪，默认直接通过 ingress 访问服务进行压测，单轮压测口径尽量对齐 `bench_ingress.py`
+Maas vLLM 单 Pod 压测主脚本，当前公共压测逻辑也已整合到这个文件中。
+- Pod 和指标命名空间固定为 `ske-model`
+- 会先确认目标 Pod 就绪，再通过 `kubectl port-forward pod/<pod>` 将流量只打到单个 Pod
 - 默认输出长度为 `256 tokens`
 - 支持显式指定：
   1. `--context`: 集群别名，默认 `zz`
-  2. `--deployment-name`: 目标 deployment
-  3. `--pods` / `--pod-regex`: 显式传入测试 pod，优先用于 Thanos 指标过滤
-  4. `--token-lengths`: 输入长度列表
-  5. `--cache-rates`: 缓存命中率列表
-  6. `--concurrency` / `--total-requests`: 每组压测并发和总请求数
-  7. `--benchmark-mode`: `fixed` 或 `sustained`
-  8. `--duration-seconds` / `--report-interval-seconds`: sustained 模式参数
-  9. `--base-url`: 显式指定压测入口，默认按 context + deployment 推导 ingress URL
-  10. `--metrics-service`: Thanos 中 vLLM 指标的 service 标签，默认等于 deployment 名
-  11. `--thanos-selector` / `--thanos-query`: 自定义 PromQL selector 或整条查询
-- 从 Thanos 收集指标，默认复用 maas Grafana 面板的 PromQL 口径：
-  - `vllm:num_requests_waiting`
-  - `vllm:num_requests_running`
-  - `vllm:e2e_request_latency_seconds_bucket`
-  - `vllm:time_to_first_token_seconds_bucket`
-  - `vllm:prompt_tokens_total`
-  - `vllm:generation_tokens_total`
-  - `vllm:gpu_prefix_cache_hits_total / queries_total`
-  - `vllm:prefix_cache_hits_total / queries_total`
-  - `vllm:kv_cache_usage_perc`
+  2. `--pod`: 目标 Pod
+  3. `--token-lengths`: 输入长度列表
+  4. `--cache-rates`: 缓存命中率列表
+  5. `--concurrency` / `--total-requests`: 每组压测并发和总请求数
+  6. `--benchmark-mode`: `fixed` 或 `sustained`
+  7. `--duration-seconds` / `--report-interval-seconds`: sustained 模式参数
+  8. `--local-port`: 本地 port-forward 端口，不传则自动选取
+  9. `--thanos-query`: 自定义 PromQL 查询
 - 结果按 JSON 格式统一保存到 `/tmp/maas-benchmark-result.log`
+- 从 Thanos 收集 DCU 相关指标，结果按 JSON 格式统一保存到 `/tmp/maas-benchmark-result.log`
 
 **使用方法：**
 ```bash
 uv run /Users/humin/agent/maas/maas_test.py --help
-# 默认单配置测试
-uv run /Users/humin/agent/maas/maas_test.py
-# 郑州集群实际使用建议
+# 单 Pod 测试
 uv run /Users/humin/agent/maas/maas_test.py \
   --context zz \
-  --deployment-name minimax-m25-int8-yy \
-  --pods <pod1> <pod2> \
-  --metrics-service minimax-m25-int8-yy \
-  --token-lengths 20000 40000 80000 120000 \
-  --cache-rates 0.0 0.4 0.8
+  --pod minimax-m25-int8-vip-548776f468-2dzw5 \
+  --token-lengths 20000 80000 \
+  --cache-rates 0.0 0.8
 ```
 
 ### maas_tune.py

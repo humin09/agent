@@ -10,7 +10,7 @@ import asyncio
 from dataclasses import asdict
 from datetime import datetime
 
-from maas_benchmark_lib import (
+from maas_test import (
     DEFAULT_BATCHED_TOKENS,
     DEFAULT_NAMESPACE,
     DeploymentConfig,

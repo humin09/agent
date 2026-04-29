@@ -39,7 +39,7 @@ deepseek-r1-0528-8b
 - Anthropic 协议: ❌
 - 模型信息: /opt/model/DeepSeek-R1-0528-Qwen3-8B
 - 模型最大上下文长度: 32768
-- 副本数30/30
+- 副本数20/20
 请求示例:
 ```bash
 curl -X POST 'http://deepseek-r1-0528-8b.ksai.scnet.cn:58000/v1/chat/completions' \
@@ -57,7 +57,7 @@ deepseek-r1-70b
 - Anthropic 协议: ❌
 - 模型信息: /opt/model/DeepSeek-R1-Distill-Llama-70B
 - 模型最大上下文长度: 32000
-- 副本数3/2
+- 副本数3/3
 请求示例:
 ```bash
 curl -X POST 'http://deepseek-r1-70b.ksai.scnet.cn:58000/v1/chat/completions' \
@@ -72,7 +72,7 @@ curl -X POST 'http://deepseek-r1-70b.ksai.scnet.cn:58000/v1/chat/completions' \
 
 deepseek-v4-pro
 - http://deepseek-v4-pro.ksai.scnet.cn:58000:/v1/models ✅
-- Anthropic 协议: ❌
+- Anthropic 协议: ✅
 - 模型信息: deepseek-v4-pro
 - 模型最大上下文长度: 1000000
 - 副本数1/1
@@ -93,7 +93,7 @@ qwen3-30b
 - Anthropic 协议: ❌
 - 模型信息: /opt/model/Qwen3-30B-A3B
 - 模型最大上下文长度: 131072
-- 副本数5/3
+- 副本数4/4
 请求示例:
 ```bash
 curl -X POST 'http://qwen3-30b.ksai.scnet.cn:58000/v1/chat/completions' \
@@ -124,6 +124,31 @@ curl -X POST 'http://qwen3-embedding-8b.ksai.scnet.cn:58000/v1/chat/completions'
   }'
 ```
 
+qwen36-35b-a3b
+- http://qwen36-35b-a3b.ksai.scnet.cn:58000:/v1/models ✅
+- Anthropic 协议: ✅
+- 模型信息: Qwen3.6-35B-A3B
+- 模型最大上下文长度: 262144
+- 副本数1/1
+请求示例:
+```bash
+curl -X POST 'http://qwen36-35b-a3b.ksai.scnet.cn:58000/v1/chat/completions' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "Qwen3.6-35B-A3B",
+    "messages": [{"role": "user", "content": "你好"}],
+    "temperature": 0.7,
+    "stream": false
+  }'
+```
+
+qwen36-35b-a3b-vllm18
+- http://qwen36-35b-a3b-vllm18.ksai.scnet.cn:58000:/v1/models ❌
+- Anthropic 协议: ❌
+- 模型信息: ❌
+- 模型最大上下文长度: N/A
+- 副本数0/0
+
 qwq-32b
 - http://qwq-32b.ksai.scnet.cn:58000:/v1/models ✅
 - Anthropic 协议: ❌
@@ -151,7 +176,7 @@ r1-h20
 
 deepseek-r1-0528
 - http://deepseek-r1-0528.zzai2.scnet.cn:58000:/v1/models ✅
-- Anthropic 协议: ❌
+- Anthropic 协议: ✅
 - 模型信息: /data/models/DeepSeek-R1-0528-BF16
 - 模型最大上下文长度: 131072
 - 副本数8/8
@@ -168,11 +193,44 @@ curl -X POST 'http://deepseek-r1-0528.zzai2.scnet.cn:58000/v1/chat/completions' 
 ```
 
 deepseek-v32-int8
-- http://deepseek-v32-int8.zzai2.scnet.cn:58000:/v1/models ❌
+- http://deepseek-v32-int8.zzai2.scnet.cn:58000:/v1/models ✅
 - Anthropic 协议: ❌
-- 模型信息: ❌
-- 模型最大上下文长度: N/A
+- 模型信息: deepsseek-v3.2-int8
+- 模型最大上下文长度: 131072
 - 副本数2/2
+请求示例:
+```bash
+curl -X POST 'http://deepseek-v32-int8.zzai2.scnet.cn:58000/v1/chat/completions' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "deepsseek-v3.2-int8",
+    "messages": [{"role": "user", "content": "你好"}],
+    "temperature": 0.7,
+    "stream": false
+  }'
+```
+
+kimi-k26
+- http://kimi-k26.zzai2.scnet.cn:58000:/v1/models ✅
+- Anthropic 协议: ✅
+- 模型信息: Kimi-K2.6
+- 模型最大上下文长度: 262144
+- 副本数1/1
+请求示例:
+```bash
+curl -X POST 'http://kimi-k26.zzai2.scnet.cn:58000/v1/chat/completions' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "Kimi-K2.6",
+    "messages": [{"role": "user", "content": "你好"}],
+    "temperature": 0.7,
+    "stream": false
+  }'
+```
+
+kimi-k26-worker-1
+- /v1/models ❌
+- 副本数1/1
 
 minimax-m25-int8
 - http://minimax-m25-int8.zzai2.scnet.cn:58000:/v1/models ✅
@@ -258,6 +316,24 @@ curl -X POST 'http://minimax-m27-bf16-test.zzai2.scnet.cn:58000/v1/chat/completi
   -H 'Content-Type: application/json' \
   -d '{
     "model": "/models/MiniMax-M2.7-bf16",
+    "messages": [{"role": "user", "content": "你好"}],
+    "temperature": 0.7,
+    "stream": false
+  }'
+```
+
+minimax-m27-int8-internal
+- http://minimax-m27-int8-internal.zzai2.scnet.cn:58000:/v1/models ✅
+- Anthropic 协议: ✅
+- 模型信息: /models/MiniMax-M2.7-W8A8
+- 模型最大上下文长度: 196608
+- 副本数4/4
+请求示例:
+```bash
+curl -X POST 'http://minimax-m27-int8-internal.zzai2.scnet.cn:58000/v1/chat/completions' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "/models/MiniMax-M2.7-W8A8",
     "messages": [{"role": "user", "content": "你好"}],
     "temperature": 0.7,
     "stream": false
