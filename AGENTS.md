@@ -253,6 +253,31 @@ docker push image.ac.com:5000/k8s/<镜像名>:<tag>
 - Ex-LB: `~/agent/ex-lb/SKILL.md`
 - kubeasz: `~/agent/kubeasz/SKILL.md`
 
+ClusterPolicy 用户限制专题（直接内建，无需额外 Skill 文件）：
+- 当用户表达“给哪个用户限制使用挂载路径和资源组”“给某个用户增加/修改挂载白名单和资源组限制”“更新某集群某用户的 cluster policy”这类意图时，默认识别为 **Kyverno ClusterPolicy 变更任务**。
+- 默认目标是对应集群内与该用户/命名空间相关的 `ClusterPolicy`，重点处理两类策略：
+  - `hostPath` 挂载路径白名单限制
+  - `Pod` / 工作负载 `nodeSelector.resourceGroup` 注入或限制
+- 执行该类任务时，必须遵循以下流程：
+  1. 先用显式 `--context <别名>` 查询目标集群现有 `ClusterPolicy`、相关 namespace、现有白名单路径和 `resourceGroup` 配置。
+  2. 明确本次变更内容：目标集群、目标 namespace/用户、允许的挂载路径列表、目标 `resourceGroup`、是新增还是修改。
+  3. 先输出准备执行的 `kubectl` 变更命令、受影响的 `ClusterPolicy` 名称、规则名和影响范围，并等待人工确认。
+  4. 变更前先导出原始 YAML 作为回滚依据，例如：
+     ```bash
+     kubectl --context <别名> get clusterpolicy <name> -o yaml
+     ```
+  5. 变更后必须再次查询并校验最终 YAML，确认：
+     - 白名单路径准确写入
+     - `resourceGroup` 注入规则准确写入
+     - 未误伤其他 namespace/用户
+     - `status.conditions` 为 `Ready=True`
+- 若用户没有明确给出 `namespace`，默认先根据用户名、现有策略命名、相关工作负载和历史规则推断；若仍无法可靠判断，再向用户追问。
+- 若集群内不存在对应策略，则默认方案是：
+  - 在现有命名风格基础上新增或扩展 `restrict-hostpath` 规则
+  - 在现有命名风格基础上新增或扩展 `mutate-pod-nodeselector` 规则
+  - 保持规则命名与现网风格一致，避免引入不必要的新策略对象
+- 对 `ClusterPolicy` 的任何 `apply`、`patch`、`replace` 都属于高风险变更，必须严格遵守本文件的人工确认规则，不得直接执行。
+
 ### 3.9 标准变更执行流程（强制）
 
 1. 保留当前配置确保可以回滚（导出 YAML/记录关键参数与版本）.

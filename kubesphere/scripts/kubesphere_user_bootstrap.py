@@ -204,6 +204,20 @@ def render_documents(documents: Iterable[dict], stream) -> None:
         first = False
 
 
+def kubectl_get_json(context: str, resource_args: list[str], name: str) -> dict | None:
+    cmd = ["kubectl", "--context", context, "get", *resource_args, name, "-o", "json"]
+    completed = subprocess.run(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        check=False,
+        text=True,
+    )
+    if completed.returncode != 0:
+        return None
+    return json.loads(completed.stdout)
+
+
 def resource_ref(document: dict) -> tuple[str, str]:
     api_version = document["apiVersion"]
     kind = document["kind"]
@@ -227,17 +241,7 @@ def resource_ref(document: dict) -> tuple[str, str]:
 
 def resource_exists(context: str, document: dict) -> bool:
     resource, name = resource_ref(document)
-    cmd = ["kubectl", "--context", context, "get"]
-    cmd.extend(resource.split())
-    cmd.append(name)
-    completed = subprocess.run(
-        cmd,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        check=False,
-        text=False,
-    )
-    return completed.returncode == 0
+    return kubectl_get_json(context, resource.split(), name) is not None
 
 
 def filter_existing(context: str, documents: list[dict], verbose: bool) -> list[dict]:
@@ -254,6 +258,62 @@ def filter_existing(context: str, documents: list[dict], verbose: bool) -> list[
             continue
         pending.append(document)
     return pending
+
+
+def parse_member_context_mapping(items: list[str]) -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    for item in items:
+        cluster, separator, context = item.partition("=")
+        if not separator or not cluster or not context:
+            raise SystemExit(
+                f"invalid --member-context value {item!r}; expected <kubesphere-cluster-name>=<kubectl-context>"
+            )
+        mapping[cluster] = context
+    return mapping
+
+
+def namespace_is_workspace_managed(namespace: dict, username: str) -> bool:
+    owner_references = namespace.get("metadata", {}).get("ownerReferences") or []
+    return any(
+        ref.get("kind") == "Workspace" and ref.get("name") == username
+        for ref in owner_references
+    )
+
+
+def find_unmanaged_namespace_conflicts(
+    username: str,
+    clusters: list[str],
+    member_contexts: dict[str, str],
+) -> list[str]:
+    conflicts: list[str] = []
+    for cluster in clusters:
+        context = member_contexts.get(cluster)
+        if not context:
+            continue
+        namespace = kubectl_get_json(context, ["namespaces"], username)
+        if namespace is None:
+            continue
+        if namespace_is_workspace_managed(namespace, username):
+            continue
+
+        metadata = namespace.get("metadata", {})
+        labels = metadata.get("labels") or {}
+        owner_references = metadata.get("ownerReferences") or []
+        owner_summary = (
+            ",".join(
+                f"{ref.get('kind', '?')}/{ref.get('name', '?')}"
+                for ref in owner_references
+            )
+            if owner_references
+            else "none"
+        )
+        conflicts.append(
+            f"- cluster={cluster} context={context} namespace={username} "
+            f"workspace_label={labels.get('kubesphere.io/workspace', '')!r} "
+            f"managed_label={labels.get('kubesphere.io/managed', '')!r} "
+            f"ownerReferences={owner_summary}"
+        )
+    return conflicts
 
 
 def parse_args() -> argparse.Namespace:
@@ -282,6 +342,23 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Print skipped resources to stderr when --skip-existing is used",
     )
+    parser.add_argument(
+        "--member-context",
+        action="append",
+        default=[],
+        help=(
+            "Map a KubeSphere member cluster to a local kubectl context for namespace preflight. "
+            "Format: <kubesphere-cluster-name>=<kubectl-context>. Repeatable."
+        ),
+    )
+    parser.add_argument(
+        "--allow-unmanaged-preexisting-namespace",
+        action="store_true",
+        help=(
+            "Allow rendering manifests even when a target member cluster already has the same namespace "
+            "without Workspace ownerReferences. Use only when you have a separate adoption or rebuild plan."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -290,11 +367,32 @@ def validate_args(args: argparse.Namespace) -> None:
         raise SystemExit("at least one --cluster is required")
     if args.skip_existing and not args.context:
         raise SystemExit("--context is required when --skip-existing is set")
+    args.member_context_map = parse_member_context_mapping(args.member_context)
+
+
+def validate_member_namespaces(args: argparse.Namespace) -> None:
+    conflicts = find_unmanaged_namespace_conflicts(
+        args.username,
+        args.clusters,
+        args.member_context_map,
+    )
+    if conflicts and not args.allow_unmanaged_preexisting_namespace:
+        details = "\n".join(conflicts)
+        raise SystemExit(
+            "refusing to render bootstrap manifests because an unmanaged preexisting namespace was found.\n"
+            "Applying the default Namespace manifest on top of an existing namespace only adds labels; "
+            "it does not make KubeSphere adopt that namespace as a Workspace-managed project.\n"
+            "This can leave the user unable to see the member cluster in the console.\n"
+            "Resolve by deleting/rebuilding the namespace through Workspace placement, or rerun with "
+            "--allow-unmanaged-preexisting-namespace only if you have a separate reconciliation plan.\n"
+            f"{details}"
+        )
 
 
 def main() -> int:
     args = parse_args()
     validate_args(args)
+    validate_member_namespaces(args)
 
     documents: list[dict] = [
         build_user(args.username, args.email, args.password, args.clusters),

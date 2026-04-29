@@ -107,6 +107,7 @@ kubectl --context ks -n <namespace> get role,rolebinding
 推荐模式：
 - 先生成 YAML，不直接改集群
 - 如果要防重复，使用 `--skip-existing --context ks`
+- 如果要覆盖 member cluster，补 `--member-context <kubesphere-cluster-name>=<kubectl-context>` 做 namespace 预检
 
 示例：
 
@@ -114,6 +115,7 @@ kubectl --context ks -n <namespace> get role,rolebinding
 python ~/agent/kubesphere/scripts/kubesphere_user_bootstrap.py \
   --context ks \
   --skip-existing \
+  --member-context cluster-member-zhengzhou=zz \
   --username demo-user \
   --email demo-user@example.com \
   --password 'P@88w0rd!' \
@@ -124,6 +126,8 @@ python ~/agent/kubesphere/scripts/kubesphere_user_bootstrap.py \
 
 说明：
 - 该脚本默认只输出资源清单，不直接 apply
+- 如果目标 member cluster 上已经有同名 namespace，但该 namespace 没有 `ownerReferences -> Workspace/<username>`，脚本会默认报错并拒绝继续
+- 这类 namespace 不能靠“补标签 + apply Namespace 清单”完成 KubeSphere 接管；应先删除重建，或用单独的重收敛流程处理
 - 执行 `python` 或 `kubectl apply` 之前，遵循根 `AGENTS.md` 的人工确认规则
 
 ## 排障要点

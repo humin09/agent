@@ -1303,7 +1303,7 @@ examples:
     args.metrics_service = args.pod
     args.base_url = None
     args.pods = [args.pod]
-    args.pod_regex = f"^{re.escape(args.pod)}$"
+    args.pod_regex = f"^{args.pod}$"
     return validate_common_args(parser, args)
 
 
