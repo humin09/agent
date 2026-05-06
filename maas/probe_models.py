@@ -3,6 +3,7 @@ import json
 import subprocess
 import time
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
 
 import requests
 
@@ -12,6 +13,8 @@ CLUSTERS = [
     {"name": "昆山", "context": "ks", "namespace": "ske-model"},
     {"name": "郑州", "context": "zz", "namespace": "ske-model"},
 ]
+RESPONSES_TIMEOUT = 6
+MAX_PROBE_WORKERS = 12
 
 
 def get_k8s_resources(context, namespace):
@@ -51,6 +54,66 @@ def probe_json_post(url, payload, timeout=5, headers=None, retries=1, retry_inte
             if attempt < retries - 1:
                 time.sleep(retry_interval)
     return None
+
+
+def parse_json_response(response):
+    if response is None:
+        return None
+    try:
+        return response.json()
+    except Exception:
+        return None
+
+
+def is_standard_response_object(data):
+    return isinstance(data, dict) and data.get("object") == "response"
+
+
+def probe_responses_basic(url_prefix, model_id):
+    payload = {
+        "model": model_id,
+        "input": "你好，请用一句话介绍你自己",
+        "max_output_tokens": 32,
+    }
+    response = probe_json_post(f"{url_prefix}/v1/responses", payload, timeout=RESPONSES_TIMEOUT)
+    data = parse_json_response(response)
+    return {
+        "status_code": response.status_code if response is not None else None,
+        "ok": response is not None and response.status_code == 200 and is_standard_response_object(data),
+        "data": data,
+    }
+
+
+def probe_responses_tools(url_prefix, model_id):
+    payload = {
+        "model": model_id,
+        "input": "北京天气如何？如果需要就调用工具。",
+        "tools": [
+            {
+                "type": "function",
+                "name": "get_weather",
+                "description": "Get weather by city",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"city": {"type": "string"}},
+                    "required": ["city"],
+                },
+            }
+        ],
+        "tool_choice": "auto",
+        "max_output_tokens": 64,
+    }
+    response = probe_json_post(f"{url_prefix}/v1/responses", payload, timeout=RESPONSES_TIMEOUT)
+    data = parse_json_response(response)
+    tools_echoed = isinstance(data, dict) and isinstance(data.get("tools"), list)
+    parallel_tool_calls = isinstance(data, dict) and "parallel_tool_calls" in data
+    return {
+        "status_code": response.status_code if response is not None else None,
+        "ok": response is not None and response.status_code == 200 and is_standard_response_object(data),
+        "tools_echoed": tools_echoed,
+        "parallel_tool_calls": parallel_tool_calls,
+        "data": data,
+    }
 
 
 def is_subset(expected, actual):
@@ -283,6 +346,11 @@ def probe_host_details(url_prefix):
         "first_model": "",
         "anthropic_supported": False,
         "anthropic_status": "未探测",
+        "responses_supported": False,
+        "responses_status": "未探测",
+        "responses_multiturn_status": "示例，未实测",
+        "responses_tools_supported": False,
+        "responses_tools_status": "未探测",
     }
 
     model_response = probe_url(f"{url_prefix}/v1/models")
@@ -317,16 +385,49 @@ def probe_host_details(url_prefix):
             "Content-Type": "application/json",
             "anthropic-version": "2023-06-01",
         }
-        anthropic_response = probe_json_post(
-            f"{url_prefix}/v1/messages",
-            anthropic_payload,
-            headers=anthropic_headers,
-        )
-        if anthropic_response and anthropic_response.status_code == 200:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            anthropic_future = executor.submit(
+                probe_json_post,
+                f"{url_prefix}/v1/messages",
+                anthropic_payload,
+                5,
+                anthropic_headers,
+            )
+            basic_future = executor.submit(
+                probe_responses_basic,
+                url_prefix,
+                details["first_model"],
+            )
+            anthropic_response = anthropic_future.result()
+            basic_probe = basic_future.result()
+
+        if anthropic_response is not None and anthropic_response.status_code == 200:
             details["anthropic_supported"] = True
             details["anthropic_status"] = "✅"
         else:
             details["anthropic_status"] = "❌"
+
+        if basic_probe["ok"]:
+            details["responses_supported"] = True
+            details["responses_status"] = "✅"
+
+            tools_probe = probe_responses_tools(url_prefix, details["first_model"])
+            if tools_probe["ok"] and (
+                tools_probe["tools_echoed"] or tools_probe["parallel_tool_calls"]
+            ):
+                details["responses_tools_supported"] = True
+                details["responses_tools_status"] = "✅"
+            else:
+                status_code = tools_probe["status_code"]
+                details["responses_tools_status"] = (
+                    f"❌({status_code})" if status_code is not None else "❌"
+                )
+        else:
+            status_code = basic_probe["status_code"]
+            details["responses_status"] = (
+                f"❌({status_code})" if status_code is not None else "❌"
+            )
+            details["responses_tools_status"] = "未探测"
 
     return details
 
@@ -346,16 +447,22 @@ def generate_markdown(clusters_data):
             continue
 
         for record in data["records"]:
-            md += f"{record['name']}\n"
+            md += f"### {record['name']}\n"
 
             if not record["hosts"]:
                 md += "- /v1/models ❌\n"
                 md += f"- 副本数{record['replicas']}/{record['available']}\n\n"
                 continue
 
-            probes = []
-            for host in record["hosts"]:
-                probes.append(probe_host_details(f"http://{host}:58000"))
+            with ThreadPoolExecutor(
+                max_workers=min(len(record["hosts"]), MAX_PROBE_WORKERS)
+            ) as executor:
+                probes = list(
+                    executor.map(
+                        lambda host: probe_host_details(f"http://{host}:58000"),
+                        record["hosts"],
+                    )
+                )
 
             primary_host = pick_primary_host(record["hosts"], record["name"])
             primary_probe = None
@@ -370,6 +477,9 @@ def generate_markdown(clusters_data):
             if successful_probe and successful_probe["models_ok"]:
                 md = render_host_probe(md, successful_probe)
                 md += f"- Anthropic 协议: {successful_probe['anthropic_status']}\n"
+                md += f"- OpenAI Responses 协议: {successful_probe['responses_status']}\n"
+                md += f"- Responses 多轮对话: {successful_probe['responses_multiturn_status']}\n"
+                md += f"- Responses 工具调用: {successful_probe['responses_tools_status']}\n"
                 first_model = successful_probe["first_model"]
                 first_max_len = "N/A"
                 if successful_probe["models"]:
@@ -389,10 +499,61 @@ def generate_markdown(clusters_data):
                     md += '    "stream": false\n'
                     md += "  }'\n"
                     md += "```\n"
+                    if successful_probe["responses_supported"]:
+                        md += "OpenAI Responses 示例:\n"
+                        md += "```bash\n"
+                        md += f"curl -X POST '{successful_probe['url_prefix']}/v1/responses' \\\n"
+                        md += "  -H 'Content-Type: application/json' \\\n"
+                        md += "  -d '{\n"
+                        md += f'    "model": "{first_model}",\n'
+                        md += '    "input": "你好，请用一句话介绍你自己",\n'
+                        md += '    "max_output_tokens": 128\n'
+                        md += "  }'\n"
+                        md += "```\n"
+                        md += "OpenAI Responses 多轮示例:\n"
+                        md += "```bash\n"
+                        md += f"curl -X POST '{successful_probe['url_prefix']}/v1/responses' \\\n"
+                        md += "  -H 'Content-Type: application/json' \\\n"
+                        md += "  -d '{\n"
+                        md += f'    "model": "{first_model}",\n'
+                        md += '    "previous_response_id": "<上一轮返回的 id>",\n'
+                        md += '    "input": "继续展开上一轮回答",\n'
+                        md += '    "max_output_tokens": 128\n'
+                        md += "  }'\n"
+                        md += "```\n"
+                        if successful_probe["responses_tools_supported"]:
+                            md += "OpenAI Responses 工具调用示例:\n"
+                            md += "```bash\n"
+                            md += f"curl -X POST '{successful_probe['url_prefix']}/v1/responses' \\\n"
+                            md += "  -H 'Content-Type: application/json' \\\n"
+                            md += "  -d '{\n"
+                            md += f'    "model": "{first_model}",\n'
+                            md += '    "input": "北京天气如何？如果需要就调用工具。",\n'
+                            md += '    "tool_choice": "auto",\n'
+                            md += '    "tools": [\n'
+                            md += '      {\n'
+                            md += '        "type": "function",\n'
+                            md += '        "name": "get_weather",\n'
+                            md += '        "description": "Get weather by city",\n'
+                            md += '        "parameters": {\n'
+                            md += '          "type": "object",\n'
+                            md += '          "properties": {\n'
+                            md += '            "city": {"type": "string"}\n'
+                            md += '          },\n'
+                            md += '          "required": ["city"]\n'
+                            md += '        }\n'
+                            md += '      }\n'
+                            md += '    ],\n'
+                            md += '    "max_output_tokens": 128\n'
+                            md += "  }'\n"
+                            md += "```\n"
             else:
                 fallback_probe = primary_probe or probes[0]
                 md = render_host_probe(md, fallback_probe)
                 md += "- Anthropic 协议: ❌\n"
+                md += f"- OpenAI Responses 协议: {fallback_probe['responses_status']}\n"
+                md += "- Responses 多轮对话: 示例，未实测\n"
+                md += f"- Responses 工具调用: {fallback_probe['responses_tools_status']}\n"
                 md += "- 模型信息: ❌\n"
                 md += "- 模型最大上下文长度: N/A\n"
                 md += f"- 副本数{record['replicas']}/{record['available']}\n"

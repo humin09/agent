@@ -1,0 +1,6 @@
+Mode: apply
+Candidates: 194
+Reclaimable: 2.7GiB
+claude: 156 paths, 72.1MiB
+codex: 38 paths, 2.6GiB
+Cleanup completed.

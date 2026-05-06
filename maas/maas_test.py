@@ -2,23 +2,19 @@
 """
 Maas benchmark toolkit.
 
-- Single-pod benchmark entrypoint lives in this file.
+- Public-ingress benchmark entrypoint lives in this file.
 - Shared benchmark helpers also live here so maas_tune.py can reuse them.
 """
 
 import argparse
 import asyncio
 import json
-import os
 import random
 import re
-import socket
 import statistics
 import subprocess
 import sys
-import tempfile
 import time
-from contextlib import closing
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -33,10 +29,10 @@ DEFAULT_TOKEN_LENGTHS = [20000, 40000, 80000, 120000]
 DEFAULT_CACHE_RATES = [0.0, 0.4, 0.8]
 DEFAULT_RESULT_LOG = "/tmp/maas-benchmark-result.log"
 DEFAULT_NAMESPACE = "ske-model"
-VLLM_PORT = 8000
 DEFAULT_OUTPUT_TOKENS_PER_REQUEST = 256
 DEFAULT_CONCURRENCY = 24
 DEFAULT_BENCHMARK_MODE = "fixed"
+INGRESS_HTTP_PORT = 58000
 CLUSTER_DOMAINS = {
     "zz": "zzai2.scnet.cn",
     "ks": "ksai.scnet.cn",
@@ -967,7 +963,7 @@ def build_ingress_base_url(context: str, deployment_name: str) -> str:
             f"no ingress domain mapping for context {context!r}; pass --base-url explicitly"
         )
     domain = CLUSTER_DOMAINS[context]
-    return f"http://{deployment_name}.{domain}:58000/v1/chat/completions"
+    return f"http://{deployment_name}.{domain}:{INGRESS_HTTP_PORT}/v1/chat/completions"
 
 
 def resolve_model(args: argparse.Namespace, base_url: str) -> str:
@@ -1062,141 +1058,27 @@ async def run_benchmark_matrix(
     return all_results
 
 
-def choose_local_port(preferred_port: int = 0) -> int:
-    if preferred_port > 0:
-        return preferred_port
-    with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as sock:
-        sock.bind(("127.0.0.1", 0))
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        return int(sock.getsockname()[1])
-
-
-def wait_for_local_port(host: str, port: int, timeout_seconds: int) -> bool:
-    deadline = time.monotonic() + timeout_seconds
-    while time.monotonic() < deadline:
-        try:
-            with socket.create_connection((host, port), timeout=1):
-                return True
-        except OSError:
-            time.sleep(0.2)
-    return False
-
-
-def get_pod_json(context: str, pod: str, namespace: str = DEFAULT_NAMESPACE) -> Dict[str, Any]:
-    output = run_cmd(
-        kubectl_base_cmd(context, namespace) + ["get", "pod", pod, "-o", "json"],
-        description=f"Fetch pod json for {pod}",
-        timeout=60,
-    )
-    return json.loads(output)
-
-
-def ensure_pod_ready(context: str, pod: str, namespace: str = DEFAULT_NAMESPACE) -> Dict[str, Any]:
-    pod_json = get_pod_json(context, pod, namespace)
-    phase = pod_json.get("status", {}).get("phase")
-    ready_conditions = pod_json.get("status", {}).get("conditions", [])
-    is_ready = any(
-        cond.get("type") == "Ready" and cond.get("status") == "True"
-        for cond in ready_conditions
-    )
-    if phase != "Running" or not is_ready:
-        raise RuntimeError(f"pod {pod} is not ready: phase={phase}, ready={is_ready}")
-    return pod_json
-
-
-class PortForwardSession:
-    def __init__(
-        self,
-        context: str,
-        pod: str,
-        local_port: int,
-        namespace: str = DEFAULT_NAMESPACE,
-        remote_port: int = VLLM_PORT,
-    ) -> None:
-        self.context = context
-        self.pod = pod
-        self.local_port = local_port
-        self.namespace = namespace
-        self.remote_port = remote_port
-        self.log_file: Optional[tempfile.NamedTemporaryFile] = None
-        self.process: Optional[subprocess.Popen[str]] = None
-
-    def start(self, timeout_seconds: int = 30) -> None:
-        self.log_file = tempfile.NamedTemporaryFile(
-            mode="w+",
-            prefix="maas-port-forward-",
-            suffix=".log",
-            delete=False,
-        )
-        cmd = (
-            kubectl_base_cmd(self.context, self.namespace)
-            + [
-                "port-forward",
-                f"pod/{self.pod}",
-                f"{self.local_port}:{self.remote_port}",
-                "--address",
-                "127.0.0.1",
-            ]
-        )
-        print("\n>>> Start pod port-forward")
-        print(f"    Command: {' '.join(cmd)}")
-        self.process = subprocess.Popen(
-            cmd,
-            stdout=self.log_file,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
-        if wait_for_local_port("127.0.0.1", self.local_port, timeout_seconds):
-            return
-        self.stop()
-        raise RuntimeError(
-            f"port-forward for pod {self.pod} did not become ready within {timeout_seconds}s\n"
-            f"Log:\n{self.read_log_excerpt()}"
-        )
-
-    def read_log_excerpt(self) -> str:
-        if not self.log_file:
-            return "(no log file)"
-        self.log_file.flush()
-        path = Path(self.log_file.name)
-        if not path.exists():
-            return "(log file missing)"
-        content = path.read_text(encoding="utf-8", errors="replace")
-        return content[-2000:] or "(empty log)"
-
-    def stop(self) -> None:
-        if self.process and self.process.poll() is None:
-            self.process.terminate()
-            try:
-                self.process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                self.process.kill()
-                self.process.wait(timeout=5)
-        if self.log_file:
-            self.log_file.close()
-            log_path = self.log_file.name
-            if os.path.exists(log_path):
-                os.unlink(log_path)
-            self.log_file = None
+def build_public_ingress_base_url(context: str, deployment_name: str) -> str:
+    return build_ingress_base_url(context, deployment_name)
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Benchmark one vLLM pod only via kubectl port-forward.",
+        description="Benchmark one vLLM deployment via public ingress HTTP endpoint.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""\
 examples:
-  uv run %(prog)s --context zz --pod minimax-m25-int8-vip-548776f468-2dzw5 \
+  uv run %(prog)s --context zz --deployment-name minimax-m25-int8-vip \
       --token-lengths 20000 --cache-rates 0.0
 
-  uv run %(prog)s --context zz --pod minimax-m27-int8-internal-59454cf855-7nmbv \
+  uv run %(prog)s --context zz --deployment-name minimax-m27-int8-internal \
       --token-lengths 20000 80000 --cache-rates 0.0 0.8
 """,
     )
     parser.add_argument("--context", default="zz", help="kubectl context alias")
-    parser.add_argument("--namespace", default=DEFAULT_NAMESPACE, help="target pod namespace")
+    parser.add_argument("--namespace", default=DEFAULT_NAMESPACE, help="target deployment namespace")
     parser.add_argument("--metrics-namespace", default=None, help="metrics namespace; defaults to --namespace")
-    parser.add_argument("--pod", required=True, help="target pod name")
+    parser.add_argument("--deployment-name", required=True, help="target deployment/service/ingress name")
     parser.add_argument(
         "--model",
         default=None,
@@ -1292,66 +1174,66 @@ examples:
         "--warmup-seconds",
         type=int,
         default=10,
-        help="extra wait after port-forward becomes reachable",
+        help="extra wait after ingress target check passes",
     )
     parser.add_argument(
-        "--local-port",
-        type=int,
-        default=0,
-        help="local port for pod port-forward; 0 means auto-select",
+        "--base-url",
+        default=None,
+        help="explicit chat completions URL; defaults to http://<deployment>.<cluster-domain>:58000/v1/chat/completions",
     )
     args = parser.parse_args()
     if not args.metrics_namespace:
         args.metrics_namespace = args.namespace
-    args.deployment_name = args.pod
-    args.metrics_service = args.pod
-    args.base_url = None
-    args.pods = [args.pod]
-    args.pod_regex = f"^{args.pod}$"
+    args.metrics_service = args.deployment_name
+    args.pods = None
+    args.pod_regex = None
     return validate_common_args(parser, args)
 
 
 async def orchestrate(args: argparse.Namespace):
-    pod_json = ensure_pod_ready(args.context, args.pod, args.namespace)
-    local_port = choose_local_port(args.local_port)
-    session = PortForwardSession(args.context, args.pod, local_port, args.namespace)
-    session.start()
-    try:
-        if args.warmup_seconds > 0:
-            print(f"    Port-forward ready, sleeping {args.warmup_seconds}s for warmup")
-            time.sleep(args.warmup_seconds)
-        base_url = f"http://127.0.0.1:{local_port}/v1/chat/completions"
-        print_benchmark_summary(
-            args,
-            "vLLM single-pod benchmark",
-            extra_lines=[
-                f"Pod: {args.pod}",
-                f"Pod node: {pod_json.get('spec', {}).get('nodeName', '(unknown)')}",
-                f"Base URL: {base_url}",
-            ],
-        )
-        return await run_benchmark_matrix(
-            args=args,
-            base_url=base_url,
-            metrics_service=args.pod,
-            pod_regex=args.pod_regex,
-            result_prefix={
-                "target": {
-                    "context": args.context,
-                    "namespace": args.namespace,
-                    "pod": args.pod,
-                    "node_name": pod_json.get("spec", {}).get("nodeName"),
-                    "thanos_context": args.thanos_context or args.context,
-                    "metrics_namespace": args.metrics_namespace,
-                    "metrics_service": args.pod,
-                    "mode": "single-pod",
-                    "base_url": base_url,
-                },
-                "baseline": {},
+    base_url = args.base_url
+    metrics_service = args.metrics_service
+    deployment = get_deployment_json(args.context, args.deployment_name, args.namespace)
+    pod_regex = get_pod_regex(
+        args.context,
+        deployment,
+        args.deployment_name,
+        namespace=args.namespace,
+    )
+    if not base_url:
+        base_url = build_public_ingress_base_url(args.context, args.deployment_name)
+    if args.warmup_seconds > 0:
+        print(f"    Ingress target ready, sleeping {args.warmup_seconds}s for warmup")
+        time.sleep(args.warmup_seconds)
+    print_benchmark_summary(
+        args,
+        "vLLM public-ingress benchmark",
+        extra_lines=[
+            f"Deployment: {args.deployment_name}",
+            f"Metrics service: {metrics_service}",
+            f"Pod regex: {pod_regex}",
+            f"Base URL: {base_url}",
+        ],
+    )
+    return await run_benchmark_matrix(
+        args=args,
+        base_url=base_url,
+        metrics_service=metrics_service,
+        pod_regex=pod_regex,
+        result_prefix={
+            "target": {
+                "context": args.context,
+                "namespace": args.namespace,
+                "deployment_name": args.deployment_name,
+                "thanos_context": args.thanos_context or args.context,
+                "metrics_namespace": args.metrics_namespace,
+                "metrics_service": metrics_service,
+                "mode": "public-ingress",
+                "base_url": base_url,
             },
-        )
-    finally:
-        session.stop()
+            "baseline": {},
+        },
+    )
 
 
 def main() -> int:
