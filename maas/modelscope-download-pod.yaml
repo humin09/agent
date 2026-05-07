@@ -37,6 +37,7 @@ spec:
   volumes:
   - name: models
     hostPath:
+      # 修改为目标集群的共享存储路径
       path: /work2/ai_data/models
       type: DirectoryOrCreate
   restartPolicy: Never

@@ -153,23 +153,34 @@ curl -X POST 'http://<host>.<cluster-domain>:58000/v1/images/generations' \
 
 ## ModelScope 模型下载 Pod
 
-用于在 K8s 集群中并发下载 HuggingFace/ModelScope 模型到本地存储。
+用于在 K8s 集群中并发下载 HuggingFace/ModelScope 模型到共享存储。
 
 ### 使用场景
 - 需要在集群节点中下载大型 LLM 模型（支持并发下载，默认 24 workers）
-- 模型存储到节点本地存储（`/work2/ai_data/models/`）
+- 模型存储到集群的共享存储位置
 - 支持代理访问外网（自动配置集群特定的代理认证）
+
+### 部署前准备
+
+**确认集群的共享存储路径**：
+```bash
+# 询问目标集群的共享存储位置
+# 例如：郑州 /work2/ai_data/models 或 ks /mnt/shared/models 等
+```
 
 ### 部署方法
 
 **基础模板**：`~/agent/maas/modelscope-download-pod.yaml`
 
-**部署到指定集群与资源组**：
+**部署到指定集群**：
 ```bash
-# 例：部署到郑州(zz)集群，资源组 127，并发 24
-kubectl --context <CLUSTER> apply -f ~/agent/maas/modelscope-download-pod.yaml
+# 1. 编辑 YAML，修改以下参数：
+#    - 存储路径（hostPath.path）
+#    - 代理地址（http_proxy / https_proxy）
+#    - 模型 ID 和并发数（可选）
 
-# 如需修改模型、并发数或资源组，编辑 YAML 后再 apply
+# 2. 应用到集群
+kubectl --context <CLUSTER> apply -f ~/agent/maas/modelscope-download-pod.yaml
 ```
 
 **查看下载进度**：
@@ -182,35 +193,43 @@ kubectl --context <CLUSTER> -n default logs modelscope-download -f
 kubectl --context <CLUSTER> -n default get pod modelscope-download -o wide
 ```
 
-### 配置说明（编辑 YAML）
+### 必需配置（编辑 YAML）
 
-| 参数 | 说明 |
-|------|------|
-| `--model` | ModelScope 模型 ID（e.g., `XiaomiMiMo/MiMo-V2.5`） |
-| `--cache_dir` | 本地存储路径（Pod 内挂载为 `/models`） |
-| `--max-workers` | 并发下载线程数（默认 24） |
-| `http_proxy` / `https_proxy` | 代理地址（修改为目标集群的代理） |
+| 参数 | 说明 | 示例 |
+|------|------|------|
+| `volumes[0].hostPath.path` | 集群共享存储路径 | `/work2/ai_data/models` 或 `/mnt/shared/models` |
+| `http_proxy` / `https_proxy` | 代理地址 | `http://user:pass@ip:port` |
 
-### 自定义参数示例
+### 可选配置（编辑 YAML）
 
-编辑 YAML 中的以下字段：
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--model` | ModelScope 模型 ID | `XiaomiMiMo/MiMo-V2.5` |
+| `--max-workers` | 并发下载线程数 | `24` |
 
-**修改模型和并发数**：
+### 配置示例
+
+**修改存储路径和代理**：
+```yaml
+volumes:
+  - name: models
+    hostPath:
+      path: /mnt/shared/models  # 修改为目标集群的路径
+
+env:
+  - name: http_proxy
+    value: "http://user:pass@proxy.ip:3128"
+  - name: https_proxy
+    value: "http://user:pass@proxy.ip:3128"
+```
+
+**修改下载模型和并发数**：
 ```yaml
 command:
   - /bin/sh
   - -c
   - |
-    modelscope download --model <YOUR_MODEL_ID> --cache_dir /models --max-workers <NUM>
-```
-
-**修改代理地址**：
-```yaml
-env:
-  - name: http_proxy
-    value: "http://<user>:<pass>@<ip>:<port>"
-  - name: https_proxy
-    value: "http://<user>:<pass>@<ip>:<port>"
+    modelscope download --model <MODEL_ID> --cache_dir /models --max-workers <NUM>
 ```
 
 ### 集群代理配置参考
