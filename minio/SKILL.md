@@ -25,11 +25,16 @@ targets: ["*"]
 
 | 别名 | 用途 | 指向 |
 |------|------|------|
-| `origin` | 西安主集群（公网 IP） | `http://221.11.21.199:9000` |
+| `origin` | 上游远端 MinIO | 视所在集群而定，可能指向西安 / 郑州 / 昆山 |
 | `xaminio` | 西安主集群（同 origin） | `http://221.11.21.199:9000` |
-| `minio-local` | 本集群 MinIO | ks/qd/zz: `127.0.0.1:19000`，dz: `11.1.114.201:9000` |
+| `local` | 本集群 MinIO | ks/qd/zz: `127.0.0.1:19000`，dz: `11.1.114.201:9000` |
 
 所有别名账号：`admin / SugonMinio2024_pro`
+
+`origin` 当前分层指向规则：
+- 郑州、昆山：`origin` 指向西安
+- 深圳、达州、武汉：`origin` 指向郑州
+- 青岛、魏桥：`origin` 指向昆山
 
 ### 1.3 元数据一致性约束
 
@@ -74,14 +79,14 @@ targets: ["*"]
 默认规则：
 - 跨集群传文件或目录时，优先使用各集群 MinIO 的 `tmp` 桶做中转
 - 推荐路径格式：`tmp/<名称>` 或 `tmp/<目录名>/`
-- 源集群先上传到本集群 `tmp` 桶，再由目标集群通过 `mc cp` / `mc mirror` 从源 alias 拉取到目标集群 `tmp` 桶
+- 源集群先上传到本集群 `local/tmp`，再由目标集群通过 `mc cp` / `mc mirror` 从远端 `origin/tmp` 拉取到本集群 `local/tmp`
 - 目录优先直接同步目录，不要默认先压缩；仅在用户明确要求压缩包时再打包
 
 标准流程：
 1. 在源集群 `minio=true` 节点确认源文件/目录存在
 2. 使用 `mc mb --ignore-existing <源alias>/tmp` 确保源 `tmp` 桶存在
 3. 文件使用 `mc cp`，目录使用 `mc mirror --overwrite --preserve` 上传到源 `tmp` 桶
-4. 在目标集群 `minio=true` 节点确认已配置源集群 alias
+4. 在目标集群 `minio=true` 节点确认已配置远端 `origin` alias
 5. 使用 `mc mb --ignore-existing <目标alias>/tmp` 确保目标 `tmp` 桶存在
 6. 文件使用 `mc cp`，目录使用 `mc mirror --overwrite --preserve` 同步到目标 `tmp` 桶
 7. 用 `mc ls` / `mc du` / `mc stat` 校验对象数量、大小和关键文件
@@ -92,13 +97,13 @@ targets: ["*"]
 mc mb --ignore-existing local/tmp
 mc mirror --overwrite --preserve /public/ai_data/models/Qwen3.6-35B-A3B local/tmp/Qwen3.6-35B-A3B
 
-# 目标集群：从源集群 tmp 桶同步目录到本集群 tmp 桶
+# 目标集群：从远端 origin 的 tmp 桶同步目录到本集群 tmp 桶
 mc mb --ignore-existing local/tmp
-mc mirror --overwrite --preserve zz/tmp/Qwen3.6-35B-A3B local/tmp/Qwen3.6-35B-A3B
+mc mirror --overwrite --preserve origin/tmp/Qwen3.6-35B-A3B local/tmp/Qwen3.6-35B-A3B
 
 # 文件场景
 mc cp /tmp/example.tar.gz local/tmp/
-mc cp zz/tmp/example.tar.gz local/tmp/
+mc cp origin/tmp/example.tar.gz local/tmp/
 ```
 
 注意事项：
@@ -115,9 +120,17 @@ mc cp zz/tmp/example.tar.gz local/tmp/
 - 调度：每天凌晨 2 点（`0 2 * * *`）
 - 最大运行时间：20 小时
 - 并发策略：Forbid（上一次没跑完则跳过）
-- 同步方向：`origin/gitlab-lfs-prod` → `minio-local/gitlab-lfs-prod`
+- 当前同步拓扑不是所有集群都直接从西安拉取，而是分层同步：
+  - 西安 → 郑州、昆山
+  - 郑州 → 深圳、达州、武汉
+  - 昆山 → 青岛、魏桥
+- 各集群 CronJob 统一写法：`origin/gitlab-lfs-prod` → `local/gitlab-lfs-prod`
+- 但各集群上的 `origin` 指向不同上游：
+  - 郑州、昆山：`origin` 指向西安
+  - 深圳、达州、武汉：`origin` 指向郑州
+  - 青岛、魏桥：`origin` 指向昆山
 - 同步策略：按 256 个十六进制前缀分段 mirror，`--overwrite --preserve`（覆盖式，不删除）
-- 依赖：节点上的 `/usr/local/bin/mc` 二进制 + `/root/.mc` 配置（origin + minio-local 别名）
+- 依赖：节点上的 `/usr/local/bin/mc` 二进制 + `/root/.mc` 配置（至少包含 `origin` 与 `local` 别名）
 
 常用操作：
 ```bash
