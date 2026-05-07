@@ -39,6 +39,4 @@ spec:
     hostPath:
       path: /work2/ai_data/models
       type: DirectoryOrCreate
-  nodeSelector:
-    groupId: "127"
   restartPolicy: Never

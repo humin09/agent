@@ -189,7 +189,6 @@ kubectl --context <CLUSTER> -n default get pod modelscope-download -o wide
 | `--model` | ModelScope 模型 ID（e.g., `XiaomiMiMo/MiMo-V2.5`） |
 | `--cache_dir` | 本地存储路径（Pod 内挂载为 `/models`） |
 | `--max-workers` | 并发下载线程数（默认 24） |
-| `nodeSelector.groupId` | 资源组选择器（修改为目标资源组） |
 | `http_proxy` / `https_proxy` | 代理地址（修改为目标集群的代理） |
 
 ### 自定义参数示例
@@ -203,12 +202,6 @@ command:
   - -c
   - |
     modelscope download --model <YOUR_MODEL_ID> --cache_dir /models --max-workers <NUM>
-```
-
-**修改资源组**：
-```yaml
-nodeSelector:
-  groupId: "<NEW_GROUPID>"  # 如 "125"、"119" 等
 ```
 
 **修改代理地址**：
@@ -228,15 +221,5 @@ env:
 | `ks` (昆山) | `http://haowj:6c72c7e5@10.15.100.43:3120` |
 | `qd` (青岛) | `http://aca1kgxhox:74409cf0@10.1.4.13:3120` |
 | `dz` (达州) | `http://jsyadmin:4e2974de@10.1.100.10:3120` |
-
-### 查询资源组
-
-```bash
-# 查询集群可用资源组
-kubectl --context <CLUSTER> get node -o jsonpath='{.items[*].metadata.labels.groupId}' | tr ' ' '\n' | sort -u
-
-# 查询某资源组的节点
-kubectl --context <CLUSTER> get node -l groupId=<GROUPID> -o wide
-```
 
 
