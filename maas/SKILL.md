@@ -156,7 +156,7 @@ curl -X POST 'http://<host>.<cluster-domain>:58000/v1/images/generations' \
 用于在 K8s 集群中并发下载 HuggingFace/ModelScope 模型到本地存储。
 
 ### 使用场景
-- 需要在集群节点中下载大型 LLM 模型（支持 24 并发下载）
+- 需要在集群节点中下载大型 LLM 模型（支持并发下载，默认 24 workers）
 - 模型存储到节点本地存储（`/work2/ai_data/models/`）
 - 支持代理访问外网（自动配置集群特定的代理认证）
 
@@ -164,40 +164,63 @@ curl -X POST 'http://<host>.<cluster-domain>:58000/v1/images/generations' \
 
 **基础模板**：`~/agent/maas/modelscope-download-pod.yaml`
 
-**快速部署**（郑州集群）：
+**部署到指定集群与资源组**：
 ```bash
-kubectl --context zz apply -f ~/agent/maas/modelscope-download-pod.yaml
+# 例：部署到郑州(zz)集群，资源组 127，并发 24
+kubectl --context <CLUSTER> apply -f ~/agent/maas/modelscope-download-pod.yaml
+
+# 如需修改模型、并发数或资源组，编辑 YAML 后再 apply
 ```
 
 **查看下载进度**：
 ```bash
-kubectl --context zz -n default logs modelscope-download -f
+kubectl --context <CLUSTER> -n default logs modelscope-download -f
 ```
 
 **查看 Pod 状态**：
 ```bash
-kubectl --context zz -n default get pod modelscope-download -o wide
+kubectl --context <CLUSTER> -n default get pod modelscope-download -o wide
 ```
 
-### 配置说明
+### 配置说明（编辑 YAML）
 
 | 参数 | 说明 |
 |------|------|
 | `--model` | ModelScope 模型 ID（e.g., `XiaomiMiMo/MiMo-V2.5`） |
 | `--cache_dir` | 本地存储路径（Pod 内挂载为 `/models`） |
 | `--max-workers` | 并发下载线程数（默认 24） |
-| `groupId: "127"` | 资源组选择器（可按需修改） |
-| `http_proxy` | 代理地址（自动配置集群特定认证） |
+| `nodeSelector.groupId` | 资源组选择器（修改为目标资源组） |
+| `http_proxy` / `https_proxy` | 代理地址（修改为目标集群的代理） |
 
-### 修改模型和并发数
+### 自定义参数示例
 
 编辑 YAML 中的以下字段：
+
+**修改模型和并发数**：
 ```yaml
-# 修改下载模型
-modelscope download --model <YOUR_MODEL_ID> --cache_dir /models --max-workers <WORKERS>
+command:
+  - /bin/sh
+  - -c
+  - |
+    modelscope download --model <YOUR_MODEL_ID> --cache_dir /models --max-workers <NUM>
 ```
 
-### 支持的代理配置（按集群）
+**修改资源组**：
+```yaml
+nodeSelector:
+  groupId: "<NEW_GROUPID>"  # 如 "125"、"119" 等
+```
+
+**修改代理地址**：
+```yaml
+env:
+  - name: http_proxy
+    value: "http://<user>:<pass>@<ip>:<port>"
+  - name: https_proxy
+    value: "http://<user>:<pass>@<ip>:<port>"
+```
+
+### 集群代理配置参考
 
 | 集群 | 代理地址 |
 |------|----------|
@@ -205,5 +228,15 @@ modelscope download --model <YOUR_MODEL_ID> --cache_dir /models --max-workers <W
 | `ks` (昆山) | `http://haowj:6c72c7e5@10.15.100.43:3120` |
 | `qd` (青岛) | `http://aca1kgxhox:74409cf0@10.1.4.13:3120` |
 | `dz` (达州) | `http://jsyadmin:4e2974de@10.1.100.10:3120` |
+
+### 查询资源组
+
+```bash
+# 查询集群可用资源组
+kubectl --context <CLUSTER> get node -o jsonpath='{.items[*].metadata.labels.groupId}' | tr ' ' '\n' | sort -u
+
+# 查询某资源组的节点
+kubectl --context <CLUSTER> get node -l groupId=<GROUPID> -o wide
+```
 
 
