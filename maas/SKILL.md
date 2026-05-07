@@ -195,10 +195,12 @@ kubectl --context <CLUSTER> -n default get pod modelscope-download -o wide
 
 ### 必需配置（编辑 YAML）
 
-| 参数 | 说明 | 示例 |
-|------|------|------|
-| `volumes[0].hostPath.path` | 集群共享存储路径 | `/work2/ai_data/models` 或 `/mnt/shared/models` |
-| `http_proxy` / `https_proxy` | 代理地址 | `http://user:pass@ip:port` |
+部署前需要确认并修改以下两项（参考下方的集群配置表）：
+
+| 参数 | 说明 |
+|------|------|
+| `volumes[0].hostPath.path` | 集群共享存储路径（询问集群管理员） |
+| `http_proxy` / `https_proxy` | 代理地址（见下表） |
 
 ### 可选配置（编辑 YAML）
 
@@ -207,20 +209,29 @@ kubectl --context <CLUSTER> -n default get pod modelscope-download -o wide
 | `--model` | ModelScope 模型 ID | `XiaomiMiMo/MiMo-V2.5` |
 | `--max-workers` | 并发下载线程数 | `24` |
 
+### 集群代理配置（部署时使用）
+
+| 集群 | 代理地址 |
+|------|----------|
+| `zz` (郑州) | `http://jsyadmin:1cdf8f60@10.13.17.166:3128` |
+| `ks` (昆山) | `http://haowj:6c72c7e5@10.15.100.43:3120` |
+| `qd` (青岛) | `http://aca1kgxhox:74409cf0@10.1.4.13:3120` |
+| `dz` (达州) | `http://jsyadmin:4e2974de@10.1.100.10:3120` |
+
 ### 配置示例
 
-**修改存储路径和代理**：
+**修改存储路径和代理（以郑州为例）**：
 ```yaml
 volumes:
   - name: models
     hostPath:
-      path: /mnt/shared/models  # 修改为目标集群的路径
+      path: /work2/ai_data/models  # 询问集群的实际路径
 
 env:
   - name: http_proxy
-    value: "http://user:pass@proxy.ip:3128"
+    value: "http://jsyadmin:1cdf8f60@10.13.17.166:3128"
   - name: https_proxy
-    value: "http://user:pass@proxy.ip:3128"
+    value: "http://jsyadmin:1cdf8f60@10.13.17.166:3128"
 ```
 
 **修改下载模型和并发数**：
@@ -231,14 +242,5 @@ command:
   - |
     modelscope download --model <MODEL_ID> --cache_dir /models --max-workers <NUM>
 ```
-
-### 集群代理配置参考
-
-| 集群 | 代理地址 |
-|------|----------|
-| `zz` (郑州) | `http://jsyadmin:1cdf8f60@10.13.17.166:3128` |
-| `ks` (昆山) | `http://haowj:6c72c7e5@10.15.100.43:3120` |
-| `qd` (青岛) | `http://aca1kgxhox:74409cf0@10.1.4.13:3120` |
-| `dz` (达州) | `http://jsyadmin:4e2974de@10.1.100.10:3120` |
 
 
