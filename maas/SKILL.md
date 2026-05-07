@@ -185,12 +185,12 @@ kubectl --context <CLUSTER> apply -f ~/agent/maas/modelscope-download-pod.yaml
 
 **查看下载进度**：
 ```bash
-kubectl --context <CLUSTER> -n default logs modelscope-download -f
+kubectl --context <CLUSTER> -n ske-model logs modelscope-download -f
 ```
 
 **查看 Pod 状态**：
 ```bash
-kubectl --context <CLUSTER> -n default get pod modelscope-download -o wide
+kubectl --context <CLUSTER> -n ske-model get pod modelscope-download -o wide
 ```
 
 ### 必需配置（编辑 YAML）

@@ -2,7 +2,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: modelscope-download
-  namespace: default
+  namespace: ske-model
 spec:
   containers:
   - name: modelscope
@@ -15,15 +15,9 @@ spec:
       modelscope download --model XiaomiMiMo/MiMo-V2.5 --cache_dir /models --max-workers 24
       echo "Download completed at $(date)"
       sleep infinity
-    env:
-    - name: http_proxy
-      value: "http://jsyadmin:1cdf8f60@10.13.17.166:3128"
-    - name: https_proxy
-      value: "http://jsyadmin:1cdf8f60@10.13.17.166:3128"
-    - name: HTTP_PROXY
-      value: "http://jsyadmin:1cdf8f60@10.13.17.166:3128"
-    - name: HTTPS_PROXY
-      value: "http://jsyadmin:1cdf8f60@10.13.17.166:3128"
+    envFrom:
+    - configMapRef:
+        name: http-proxy
     volumeMounts:
     - name: models
       mountPath: /models

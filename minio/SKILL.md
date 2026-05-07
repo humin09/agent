@@ -71,11 +71,18 @@ targets: ["*"]
 
 ## 3. 跨集群同步
 
-> 当前 `ks / qd / dz / zz` 的 `ske` 命名空间下已部署：
-> - **CronJob `minio-lfs-sync`**：定时跑 LFS 桶同步（详见 3.2）
-> - **DaemonSet `mc-client`**：在每个 ex-lb 节点常驻 mc 客户端 pod，预装全集群 alias，可直接 `kubectl exec` 进去做手工 `mc cp` / `mc mirror`
-> - 两者共用 ConfigMap `minio-lfs-sync-script`（包含 `sync.sh` 与 `init.sh` 两个键）
+> 各生产集群 `ske` 命名空间下当前部署（均运行在 ex-lb 节点）：
+> - **CronJob `minio-lfs-sync`**（ks/qd/dz/zz）：定时跑 LFS 桶同步，nodeSelector ex-lb（详见 3.2）
+> - **Deployment `mc-client`**（ks/qd/dz/zz/wh/sz，单 pod，`sleep infinity`）：常驻 mc 客户端，可直接 `kubectl exec deploy/mc-client -- mc ...` 做手工 `mc cp` / `mc mirror`
+> - **共享 ConfigMap：**
+>   - `mc-aliases`（7 集群 ks/qd/dz/zz/wh/sz/wq）：9 个 `MC_HOST_*` env 变量，mc 容器 `envFrom` 后自动加载所有 alias，无需 `mc alias set` 或 config.json
+>   - `http-proxy`（6 集群，除 wh）：HTTP 代理 env，per-cluster 不同
+>   - `minio-lfs-sync-script`（4 集群）：仅 `sync.sh`，30 行 mirror 循环
 > - YAML 源文件位置：`/Users/humin/sugon/ske-chart/minio/`
+>
+> **使用 mc-client 的两条铁律：**
+> 1. **目标在本集群时必须用 `local` alias，不要用 `<本集群>` alias**。`<本集群>` alias 走公网域名，本集群 ex-lb 内部对自己公网域名常 DNS 不通或路由黑洞，会 timeout。`local` 走 `127.0.0.1:9000` 直连本机 MinIO。
+> 2. **跨集群任意方向（pull / push）都走代理即可**，无需纠结源端 push vs 目标端 pull。代理由 `http-proxy` ConfigMap 提供，本集群自己的 minio 域名已在 NO_PROXY 里 bypass。
 
 ### 3.1 临时文件 / 目录同步（推荐默认方案）
 
