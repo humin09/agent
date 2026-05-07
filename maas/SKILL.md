@@ -150,4 +150,60 @@ curl -X POST 'http://<host>.<cluster-domain>:58000/v1/images/generations' \
 其中 `cluster-domain` 固定取值：
 - 郑州 `zz`：`zzai2.scnet.cn`
 - 昆山 `ks`：`ksai.scnet.cn`
- 
+
+## ModelScope 模型下载 Pod
+
+用于在 K8s 集群中并发下载 HuggingFace/ModelScope 模型到本地存储。
+
+### 使用场景
+- 需要在集群节点中下载大型 LLM 模型（支持 24 并发下载）
+- 模型存储到节点本地存储（`/work2/ai_data/models/`）
+- 支持代理访问外网（自动配置集群特定的代理认证）
+
+### 部署方法
+
+**基础模板**：`~/agent/maas/modelscope-download-pod.yaml`
+
+**快速部署**（郑州集群）：
+```bash
+kubectl --context zz apply -f ~/agent/maas/modelscope-download-pod.yaml
+```
+
+**查看下载进度**：
+```bash
+kubectl --context zz -n default logs modelscope-download -f
+```
+
+**查看 Pod 状态**：
+```bash
+kubectl --context zz -n default get pod modelscope-download -o wide
+```
+
+### 配置说明
+
+| 参数 | 说明 |
+|------|------|
+| `--model` | ModelScope 模型 ID（e.g., `XiaomiMiMo/MiMo-V2.5`） |
+| `--cache_dir` | 本地存储路径（Pod 内挂载为 `/models`） |
+| `--max-workers` | 并发下载线程数（默认 24） |
+| `groupId: "127"` | 资源组选择器（可按需修改） |
+| `http_proxy` | 代理地址（自动配置集群特定认证） |
+
+### 修改模型和并发数
+
+编辑 YAML 中的以下字段：
+```yaml
+# 修改下载模型
+modelscope download --model <YOUR_MODEL_ID> --cache_dir /models --max-workers <WORKERS>
+```
+
+### 支持的代理配置（按集群）
+
+| 集群 | 代理地址 |
+|------|----------|
+| `zz` (郑州) | `http://jsyadmin:1cdf8f60@10.13.17.166:3128` |
+| `ks` (昆山) | `http://haowj:6c72c7e5@10.15.100.43:3120` |
+| `qd` (青岛) | `http://aca1kgxhox:74409cf0@10.1.4.13:3120` |
+| `dz` (达州) | `http://jsyadmin:4e2974de@10.1.100.10:3120` |
+
+
