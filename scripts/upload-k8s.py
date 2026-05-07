@@ -6,23 +6,9 @@ import shlex
 import subprocess
 import sys
 import re
-import tempfile
 
 
 PROTECTED_REMOTE_DIRS = ("/public", "/work", "/data")
-MINIO_UPLOAD_THRESHOLD_BYTES = 10 * 1024 * 1024
-MINIO_BUCKET = "tmp"
-LOCAL_MINIO_ALIAS = "k8s-scp-local"
-MINIO_ENDPOINTS = {
-    "ks": "http://minio.ksai.scnet.cn:9000",
-    "qd": "http://minio.qdai.scnet.cn:9000",
-    "dz": "http://minio.dzai.scnet.cn:9000",
-    "zz": "http://minio.zzai2.scnet.cn:9000",
-    "wh": "http://minio.whai.scnet.cn:9000",
-    "sz": "http://minio.szai.scnet.cn:9000",
-}
-MINIO_ACCESS_KEY = "admin"
-MINIO_SECRET_KEY = "SugonMinio2024_pro"
 
 
 def parse_remote_path(path):
@@ -99,70 +85,6 @@ def run_command(cmd, timeout=None, capture_output=True):
     )
 
 
-def ensure_local_mc_alias(context, timeout):
-    endpoint = MINIO_ENDPOINTS.get(context)
-    if not endpoint:
-        raise ValueError(
-            f"Context '{context}' does not have a configured MinIO endpoint for large file upload"
-        )
-
-    cmd = [
-        "mc",
-        "alias",
-        "set",
-        LOCAL_MINIO_ALIAS,
-        endpoint,
-        MINIO_ACCESS_KEY,
-        MINIO_SECRET_KEY,
-    ]
-    result = run_command(cmd, timeout=timeout)
-    if result.returncode != 0:
-        raise RuntimeError(result.stderr.strip() or result.stdout.strip())
-
-
-def ensure_bucket_exists(alias, timeout):
-    cmd = ["mc", "mb", "--ignore-existing", f"{alias}/{MINIO_BUCKET}"]
-    result = run_command(cmd, timeout=timeout)
-    if result.returncode != 0:
-        raise RuntimeError(result.stderr.strip() or result.stdout.strip())
-
-
-def upload_via_minio(context, local_path, object_name, timeout):
-    ensure_local_mc_alias(context, timeout)
-    ensure_bucket_exists(LOCAL_MINIO_ALIAS, timeout)
-    cmd = ["mc", "cp", local_path, f"{LOCAL_MINIO_ALIAS}/{MINIO_BUCKET}/{object_name}"]
-    print(f"Executing: {format_command_for_log(cmd)}")
-    result = subprocess.run(cmd, timeout=timeout)
-    if result.returncode != 0:
-        raise RuntimeError("mc cp to MinIO failed")
-
-
-def copy_minio_object_to_node(context, node_ip, object_name, remote_path, timeout):
-    remote_dir = posixpath.dirname(remote_path) or "."
-    quoted_remote_dir = quote_remote_path(remote_dir)
-    quoted_remote_path = quote_remote_path(remote_path)
-    quoted_object = quote_remote_path(f"local/{MINIO_BUCKET}/{object_name}")
-    cmd = [
-        "kubectl",
-        "node-shell",
-        "--context",
-        context,
-        node_ip,
-        "--",
-        "sh",
-        "-c",
-        (
-            f"mkdir -p -- {quoted_remote_dir} && "
-            f"mc mb --ignore-existing local/{MINIO_BUCKET} >/dev/null 2>&1 && "
-            f"mc cp {quoted_object} {quoted_remote_path}"
-        ),
-    ]
-    print(f"Executing: {format_command_for_log(cmd)}")
-    result = run_command(cmd, timeout=timeout)
-    if result.returncode != 0:
-        raise RuntimeError(result.stderr.strip() or result.stdout.strip())
-
-
 def copy_file_to_node(context, node_ip, local_path, remote_path, timeout=300):
     """
     Copy file from local to Kubernetes node using kubectl node-shell
@@ -190,29 +112,6 @@ def copy_file_to_node(context, node_ip, local_path, remote_path, timeout=300):
         quoted_remote_path = quote_remote_path(remote_path)
 
         print(f"Uploading {local_path} to {node_ip}:{remote_path}")
-
-        file_size = os.path.getsize(local_path)
-        if file_size > MINIO_UPLOAD_THRESHOLD_BYTES:
-            object_name = os.path.basename(remote_path)
-            print(
-                f"File size {file_size} bytes exceeds {MINIO_UPLOAD_THRESHOLD_BYTES} bytes, "
-                "using MinIO tmp bucket staging"
-            )
-            upload_via_minio(
-                context=context,
-                local_path=local_path,
-                object_name=object_name,
-                timeout=timeout,
-            )
-            copy_minio_object_to_node(
-                context=context,
-                node_ip=node_ip,
-                object_name=object_name,
-                remote_path=remote_path,
-                timeout=timeout,
-            )
-            print(f"File uploaded successfully to: {node_ip}:{remote_path}")
-            return True
 
         cmd = [
             "kubectl",
@@ -295,24 +194,24 @@ def copy_file_from_node(context, node_ip, remote_path, local_path, timeout=300):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Kubernetes SCP - Copy files to/from Kubernetes nodes",
+        description="Kubernetes file transfer - Copy files to/from Kubernetes nodes",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   Upload file to node:
-    python k8s_scp.py -c qd local_file.txt 10.1.4.9:/remote/path/file.txt
+    python upload-k8s.py -c qd local_file.txt 10.1.4.9:/remote/path/file.txt
 
   Upload file to /tmp on node (default when path omitted):
-    python k8s_scp.py -c qd local_file.txt 10.1.4.9
+    python upload-k8s.py -c qd local_file.txt 10.1.4.9
 
   Download file from node:
-    python k8s_scp.py -c qd 10.1.4.9:/remote/path/file.txt local_file.txt
+    python upload-k8s.py -c qd 10.1.4.9:/remote/path/file.txt local_file.txt
 
   Upload to current directory on node:
-    python k8s_scp.py -c qd local_file.txt 10.1.4.9:.
+    python upload-k8s.py -c qd local_file.txt 10.1.4.9:.
 
   Download from current directory on node:
-    python k8s_scp.py -c qd 10.1.4.9:remote_file.txt .
+    python upload-k8s.py -c qd 10.1.4.9:remote_file.txt .
         """,
     )
 

@@ -124,12 +124,12 @@ node-shell命令例外：
 
 | 别名 | 城市 | 节点外网代理 |
 |------|------|--------------|
-| `ks` | 昆山 | `10.15.100.43:3120` |
-| `qd` | 青岛 | `10.1.4.13:3120` |
+| `ks` | 昆山 | `http://haowj:6c72c7e5@10.15.100.43:3120` |
+| `qd` | 青岛 | `http://aca1kgxhox:74409cf0@10.1.4.13:3120` |
 | `sz` | 深圳 | `10.1.100.10:3120` |
 | `wq` | 魏桥 | `10.10.1.3:3128` |
-| `zz` | 郑州 | `10.13.17.166:3128` |
-| `dz` | 达州 | `10.1.100.10:3120` |
+| `zz` | 郑州 | `http://jsyadmin:1cdf8f60@10.13.17.166:3128` |
+| `dz` | 达州 | `http://jsyadmin:4e2974de@10.1.100.10:3120` |
 
 节点访问外网时的推荐写法：
 ```bash
@@ -341,4 +341,17 @@ CODEX_CARD=<激活码> python ~/agent/scripts/codex_quota.py
 python ~/agent/scripts/agent_state_cleanup.py
 python ~/agent/scripts/agent_state_cleanup.py --verbose
 python ~/agent/scripts/agent_state_cleanup.py --products codex claude --apply
+```
+
+### 5.3 节点外网代理账号管理
+
+当前有效代理账号（从 K8s notebook pod 环境变量提取）：
+
+| 账号 | 密码 | IP:Port | 对应集群 | 提取时间 |
+|------|------|---------|---------|---------|
+| haowj | 6c72c7e5 | 10.15.100.43:3120 | ks (昆山) | 2026-05-07 |
+
+获取方式：在目标集群 jsyadmin namespace 的 notebook pod 中查看环境变量：
+```bash
+kubectl --context <别名> -n jsyadmin describe pod <notebook-pod> | grep -A 5 "http_proxy"
 ```
