@@ -34,9 +34,9 @@ targets: ["*"]
 所有别名账号：`admin / SugonMinio2024_pro`
 
 `origin` 当前分层指向规则：
-- 郑州、昆山：`origin` 指向西安
-- 深圳、达州、武汉：`origin` 指向郑州
-- 青岛：`origin` 指向昆山
+- 郑州：`origin` 指向西安（221.11.21.199）
+- 昆山、青岛、达州：`origin` 指向郑州（minio.zzai2.scnet.cn）
+- 深圳、武汉：`origin` 指向郑州
 
 ### 1.3 元数据一致性约束
 
@@ -139,15 +139,13 @@ mc cp origin/tmp/example.tar.gz local/tmp/
 - 当前部署集群（仅以下 4 个生产集群启用 LFS 自动同步）：
   - `ks`（昆山）、`qd`（青岛）、`dz`（达州）、`zz`（郑州）
   - 其他生产集群（`ny` 纽约、`sz` 深圳、`wh` 武汉、`wq` 魏桥）当前不部署该 CronJob
-- 当前同步拓扑（分层同步，不是所有集群都直接从西安拉取）：
-  - 西安 → 郑州（`zz`）、昆山（`ks`）
-  - 郑州（`zz`）→ 达州（`dz`）
-  - 昆山（`ks`）→ 青岛（`qd`）
+- 当前同步拓扑（分层同步，郑州为中心节点）：
+  - 西安 → 郑州（`zz`）
+  - 郑州（`zz`）→ 昆山（`ks`）、青岛（`qd`）、达州（`dz`）
 - 各集群 CronJob 统一写法：`origin/gitlab-lfs-prod` → `local/gitlab-lfs-prod`
 - 但各集群上的 `origin` 指向不同上游：
-  - 郑州、昆山：`origin` 指向西安
-  - 达州：`origin` 指向郑州
-  - 青岛：`origin` 指向昆山
+  - 郑州：`origin` 指向西安（221.11.21.199）
+  - 昆山、青岛、达州：`origin` 指向郑州（minio.zzai2.scnet.cn）
 - 同步策略：按 256 个十六进制前缀分段 mirror，`--overwrite --preserve`（覆盖式，不删除）
 - 依赖：节点上的 `/usr/local/bin/mc` 二进制 + `/root/.mc` 配置（至少包含 `origin` 与 `local` 别名）
 

@@ -11,6 +11,7 @@ targets: ["*"]
 2. 如果有ske-model的服务变更,你会重新生成服务的可探测url, url生成规则见下面章节.
 3. 如果用户说检查服务, 你会查看各个deployment是否都达到预期的副本数, 以及基于可探测url校验服务是否可用.
 4. 如果用户说更新可用模型列表, 你会运行 probe_models.py 脚本来生成 available_models.md 报告.
+5. 如果是 ske-model 命名空间下的辅助服务变更（如 rsync、下载器、同步工具等非模型推理 Deployment），你也会把昆山和郑州对应 YAML 同步到 `~/sugon/ske-chart/ske-model/<service>/` 目录，并保留集群差异。
 
 ## 工具脚本
 
@@ -58,6 +59,24 @@ uv run /Users/humin/agent/maas/maas_test.py \
   --pod minimax-m25-int8-vip-548776f468-2dzw5 \
   --token-lengths 20000 80000 \
   --cache-rates 0.0 0.8
+```
+
+**压测指导 - tpm-单用户 QoS 保障：**
+
+压测时的核心指标是 `tpm-单用户`（tokens per minute per user = tpm-总 / 并发数），需要遵循以下原则：
+
+1. **目标范围**: tpm-单用户 应在 **550-650** 区间内
+2. **初始测试**: 从适中并发数开始（如 4-8），观察 tpm-单用户 值
+3. **动态调整**:
+   - 如果 tpm-单用户 **低于 550**：按比例 **减少并发数**
+     - 示例：如果当前 tpm-单用户=400（低60%），则并发数减 60%
+   - 如果 tpm-单用户 **高于 650**：可以 **增加并发数** 以优化吞吐
+     - 示例：如果当前 tpm-单用户=800（高23%），则并发数增 23%
+4. **最终验证**: 达到目标范围后再做一轮压测，确认 tpm-单用户 稳定在 550-650
+
+**计算公式**:
+```
+tpm-单用户 = (输入token总数 + 输出token总数) / 总耗时秒数 × 60 / 并发数
 ```
 
 ### maas_tune.py
@@ -240,7 +259,74 @@ command:
   - /bin/sh
   - -c
   - |
-    modelscope download --model <MODEL_ID> --cache_dir /models --max-workers <NUM>
+
+## ske-model rsync 常驻服务
+
+用于在 `ske-model` 命名空间中提供稳定的目录同步入口，避免长时间 `kubectl exec` 会话中断导致同步失败。
+
+### 适用场景
+- 需要长期保留一个可重复连接的 rsync 服务端
+- 需要在昆山和郑州分别暴露共享目录，供外部或集群内客户端反复增量同步
+- 需要把这类同步服务 YAML 与 ske-model 其他服务一样落盘到 chart 目录
+
+### YAML 落盘规则
+- 昆山和郑州分别保存到 `~/sugon/ske-chart/ske-model/rsync/ks.yaml` 与 `~/sugon/ske-chart/ske-model/rsync/zz.yaml`
+- 命名空间固定为 `ske-model`
+- 需要同时保存 `ConfigMap`、`Deployment`、`Service`
+
+### 当前约定
+- 镜像统一使用 `image.ac.com:5000/k8s/rsync:latest`
+- 进程以前台方式启动：`/rsync --no-detach --daemon --config=/etc/rsyncd.conf`
+- 默认暴露两个 module：
+  - `public` -> `/public`
+  - `work` -> `/work`
+- 当前路径映射：
+  - `ks`：宿主机 `/public`、`/work`
+  - `zz`：宿主机 `/public`、`/work2`，容器内统一挂到 `/work`
+- 默认资源：`cpu: 2`、`memory: 4Gi`
+- 默认调度：
+  - `ks`：`groupId=54`
+  - `zz`：`groupId=127`
+
+### 变更后检查
+```bash
+kubectl --context ks -n ske-model get deploy,po,svc | grep rsync
+kubectl --context zz -n ske-model get deploy,po,svc | grep rsync
+kubectl --context ks -n ske-model logs deploy/rsync --tail=50
+kubectl --context zz -n ske-model logs deploy/rsync --tail=50
 ```
 
+### 使用方式
 
+客户端可直接把它当 rsync 服务端使用，不再依赖长时间 `kubectl exec` 会话。
+
+**查看服务信息：**
+```bash
+kubectl --context ks -n ske-model get svc rsync
+kubectl --context zz -n ske-model get svc rsync
+```
+
+**查看可用模块：**
+```bash
+kubectl --context ks -n ske-model port-forward svc/rsync 8873:873
+rsync rsync://127.0.0.1:8873/
+
+kubectl --context zz -n ske-model port-forward svc/rsync 8873:873
+rsync rsync://127.0.0.1:8873/
+```
+
+**同步示例：**
+```bash
+# 上传本地目录到 public 模块
+rsync -av --progress /local/path/ rsync://127.0.0.1:8873/public/
+
+# 上传本地目录到 work 模块
+rsync -av --progress /local/path/ rsync://127.0.0.1:8873/work/
+
+# 从服务端拉取
+rsync -av --progress rsync://127.0.0.1:8873/public/ /local/target/
+```
+
+如果后续需要跨集群或节点直连访问，再按实际网络路径补充 `NodePort`、`Ingress` 或专用转发链路；默认先使用 `kubectl port-forward svc/rsync 8873:873`。
+    modelscope download --model <MODEL_ID> --cache_dir /models --max-workers <NUM>
+```

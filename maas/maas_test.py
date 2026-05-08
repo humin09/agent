@@ -460,12 +460,16 @@ async def run_fixed_case(
     e2es = [s["e2e"] for s in successes if s.get("e2e") is not None]
     generated_tokens = [float(s["generated_tokens"]) for s in successes]
     total_generated_tokens = sum(generated_tokens)
+    effective_input_tokens = case.token_length * (1 - case.cache_rate) * len(successes)
+    weighted_tokens = effective_input_tokens * 1 + total_generated_tokens * 10
+    tpm = (weighted_tokens / total_time * 60) if total_time > 0 else 0.0
+    tpm_per_user = tpm / concurrency if concurrency > 0 else 0.0
     ttft_summary = summarize_samples(ttfts)
     e2e_summary = summarize_samples(e2es)
     print(
         f"    Case tokens={case.token_length}, cache={case.cache_rate:.0%}, "
         f"success={len(successes)}/{len(sample_results)}, "
-        f"gen_tps={total_generated_tokens / total_time:.1f}"
+        f"TPM={tpm:.0f}, TPM/user={tpm_per_user:.0f}"
     )
     print(format_latency_summary(ttft_summary, "TTFT"))
     print(format_latency_summary(e2e_summary, " E2E"))
@@ -483,7 +487,13 @@ async def run_fixed_case(
         "generated_tokens": {
             "per_request": summarize_samples(generated_tokens),
             "total": total_generated_tokens,
-            "throughput_tps": total_generated_tokens / total_time if total_time > 0 else 0.0,
+        },
+        "throughput": {
+            "tpm": tpm,
+            "tpm_per_user": tpm_per_user,
+            "effective_input_tokens": effective_input_tokens,
+            "output_tokens": total_generated_tokens,
+            "weighted_tokens": weighted_tokens,
         },
         "ttft_seconds": ttft_summary,
         "e2e_seconds": e2e_summary,
@@ -563,20 +573,24 @@ async def run_sustained_case(
             recent_e2es = stats["e2es"][-concurrency:] if stats["e2es"] else []
             avg_ttft = statistics.mean(recent_ttfts) if recent_ttfts else 0.0
             avg_e2e = statistics.mean(recent_e2es) if recent_e2es else 0.0
-            token_tps = stats["generated_tokens_total"] / elapsed if elapsed > 0 else 0.0
+            effective_input_tokens_current = case.token_length * (1 - case.cache_rate) * stats["success_count"]
+            weighted_tokens_current = effective_input_tokens_current * 1 + stats["generated_tokens_total"] * 10
+            tpm_current = (weighted_tokens_current / elapsed * 60) if elapsed > 0 else 0.0
+            tpm_per_user_current = tpm_current / concurrency if concurrency > 0 else 0.0
             snapshot = {
                 "elapsed_s": round(elapsed),
                 "total": total,
                 "success": stats["success_count"],
                 "errors": stats["error_count"],
-                "gen_tps": round(token_tps, 1),
+                "tpm": round(tpm_current, 0),
+                "tpm_per_user": round(tpm_per_user_current, 0),
                 "recent_avg_ttft": round(avg_ttft, 1),
                 "recent_avg_e2e": round(avg_e2e, 1),
             }
             stats["timeline"].append(snapshot)
             print(
                 f"  [{elapsed:6.0f}s] total={total}, success={stats['success_count']}, "
-                f"errors={stats['error_count']}, gen_tps={token_tps:.1f}, "
+                f"errors={stats['error_count']}, TPM={tpm_current:.0f}, TPM/user={tpm_per_user_current:.0f}, "
                 f"recent_avg_ttft={avg_ttft:.1f}s, recent_avg_e2e={avg_e2e:.1f}s"
             )
 
@@ -603,12 +617,16 @@ async def run_sustained_case(
     total_time = time.monotonic() - start_monotonic
     ttft_summary = summarize_samples(stats["ttfts"])
     e2e_summary = summarize_samples(stats["e2es"])
-    gen_tps = stats["generated_tokens_total"] / total_time if total_time > 0 else 0.0
+    effective_input_tokens_final = case.token_length * (1 - case.cache_rate) * stats["success_count"]
+    weighted_tokens_final = effective_input_tokens_final * 1 + stats["generated_tokens_total"] * 10
+    tpm_final = (weighted_tokens_final / total_time * 60) if total_time > 0 else 0.0
+    tpm_per_user_final = tpm_final / concurrency if concurrency > 0 else 0.0
     print(f"\n    End: {datetime.now().isoformat()}")
     print(f"    Wall time: {total_time:.1f}s")
     print(f"    Success: {stats['success_count']}, Errors: {stats['error_count']}")
+    print(f"    Effective input tokens: {effective_input_tokens_final}")
     print(f"    Total output tokens: {stats['generated_tokens_total']}")
-    print(f"    Overall gen throughput: {gen_tps:.1f} tokens/s")
+    print(f"    Overall TPM: {tpm_final:.0f}, TPM/user: {tpm_per_user_final:.0f}")
     print(format_latency_summary(ttft_summary, "TTFT"))
     print(format_latency_summary(e2e_summary, " E2E"))
     return {
@@ -626,7 +644,13 @@ async def run_sustained_case(
         "errors": stats["error_samples"],
         "generated_tokens": {
             "total": stats["generated_tokens_total"],
-            "throughput_tps": gen_tps,
+        },
+        "throughput": {
+            "tpm": tpm_final,
+            "tpm_per_user": tpm_per_user_final,
+            "effective_input_tokens": effective_input_tokens_final,
+            "output_tokens": stats["generated_tokens_total"],
+            "weighted_tokens": weighted_tokens_final,
         },
         "ttft_seconds": ttft_summary,
         "e2e_seconds": e2e_summary,
