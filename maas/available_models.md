@@ -126,10 +126,10 @@ curl -X POST 'http://deepseek-v4-flash.ksai.scnet.cn:58000/v1/responses' \
 
 ### deepseek-v4-pro
 - http://deepseek-v4-pro.ksai.scnet.cn:58000:/v1/models ✅
-- Anthropic 协议: ✅
-- OpenAI Responses 协议: ✅
+- Anthropic 协议: ❌
+- OpenAI Responses 协议: ❌
 - Responses 多轮对话: 示例，未实测
-- Responses 工具调用: ❌
+- Responses 工具调用: 未探测
 - 模型信息: deepseek-v4-pro
 - 模型最大上下文长度: 1000000
 - 副本数1/1
@@ -142,27 +142,6 @@ curl -X POST 'http://deepseek-v4-pro.ksai.scnet.cn:58000/v1/chat/completions' \
     "messages": [{"role": "user", "content": "你好"}],
     "temperature": 0.7,
     "stream": false
-  }'
-```
-OpenAI Responses 示例:
-```bash
-curl -X POST 'http://deepseek-v4-pro.ksai.scnet.cn:58000/v1/responses' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model": "deepseek-v4-pro",
-    "input": "你好，请用一句话介绍你自己",
-    "max_output_tokens": 128
-  }'
-```
-OpenAI Responses 多轮示例:
-```bash
-curl -X POST 'http://deepseek-v4-pro.ksai.scnet.cn:58000/v1/responses' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model": "deepseek-v4-pro",
-    "previous_response_id": "<上一轮返回的 id>",
-    "input": "继续展开上一轮回答",
-    "max_output_tokens": 128
   }'
 ```
 
@@ -316,6 +295,10 @@ curl -X POST 'http://qwq-32b.ksai.scnet.cn:58000/v1/chat/completions' \
 - 模型最大上下文长度: N/A
 - 副本数1/0
 
+### rsync
+- /v1/models ❌
+- 副本数1/1
+
 ### deepseek-r1-0528
 - http://deepseek-r1-0528.zzai2.scnet.cn:58000:/v1/models ✅
 - Anthropic 协议: ✅
@@ -380,105 +363,17 @@ curl -X POST 'http://gemma4-test.zzai2.scnet.cn:58000/v1/chat/completions' \
 ```
 
 ### kimi-k26
-- http://kimi-k26.zzai2.scnet.cn:58000:/v1/models ✅
-- Anthropic 协议: ✅
-- OpenAI Responses 协议: ✅
-- Responses 多轮对话: 示例，未实测
-- Responses 工具调用: ❌
-- 模型信息: Kimi-K2.6
-- 模型最大上下文长度: 262144
-- 副本数1/1
-请求示例:
-```bash
-curl -X POST 'http://kimi-k26.zzai2.scnet.cn:58000/v1/chat/completions' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model": "Kimi-K2.6",
-    "messages": [{"role": "user", "content": "你好"}],
-    "temperature": 0.7,
-    "stream": false
-  }'
-```
-OpenAI Responses 示例:
-```bash
-curl -X POST 'http://kimi-k26.zzai2.scnet.cn:58000/v1/responses' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model": "Kimi-K2.6",
-    "input": "你好，请用一句话介绍你自己",
-    "max_output_tokens": 128
-  }'
-```
-OpenAI Responses 多轮示例:
-```bash
-curl -X POST 'http://kimi-k26.zzai2.scnet.cn:58000/v1/responses' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model": "Kimi-K2.6",
-    "previous_response_id": "<上一轮返回的 id>",
-    "input": "继续展开上一轮回答",
-    "max_output_tokens": 128
-  }'
-```
-
-### kimi-k26-1
-- http://kimi-k26-1.zzai2.scnet.cn:58000:/v1/models ✅
-- Anthropic 协议: ❌
-- OpenAI Responses 协议: ✅
-- Responses 多轮对话: 示例，未实测
-- Responses 工具调用: ❌
-- 模型信息: Kimi-K2.6
-- 模型最大上下文长度: 262144
-- 副本数1/1
-请求示例:
-```bash
-curl -X POST 'http://kimi-k26-1.zzai2.scnet.cn:58000/v1/chat/completions' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model": "Kimi-K2.6",
-    "messages": [{"role": "user", "content": "你好"}],
-    "temperature": 0.7,
-    "stream": false
-  }'
-```
-OpenAI Responses 示例:
-```bash
-curl -X POST 'http://kimi-k26-1.zzai2.scnet.cn:58000/v1/responses' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model": "Kimi-K2.6",
-    "input": "你好，请用一句话介绍你自己",
-    "max_output_tokens": 128
-  }'
-```
-OpenAI Responses 多轮示例:
-```bash
-curl -X POST 'http://kimi-k26-1.zzai2.scnet.cn:58000/v1/responses' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model": "Kimi-K2.6",
-    "previous_response_id": "<上一轮返回的 id>",
-    "input": "继续展开上一轮回答",
-    "max_output_tokens": 128
-  }'
-```
-
-### kimi-k26-1-worker-1
-- /v1/models ❌
-- 副本数1/1
-
-### kimi-k26-worker-1
-- /v1/models ❌
-- 副本数1/1
-
-### mimo-v25
-- http://mimo-v25.zzai2.scnet.cn:58000:/v1/models ❌
+- http://kimi-k26.zzai2.scnet.cn:58000:/v1/models ❌
 - Anthropic 协议: ❌
 - OpenAI Responses 协议: 未探测
 - Responses 多轮对话: 示例，未实测
 - Responses 工具调用: 未探测
 - 模型信息: ❌
 - 模型最大上下文长度: N/A
+- 副本数0/0
+
+### kimi-k26-worker-1
+- /v1/models ❌
 - 副本数0/0
 
 ### minimax-m25-int8
@@ -548,15 +443,25 @@ curl -X POST 'http://minimax-m25-int8.zzai2.scnet.cn:58000/v1/responses' \
   }'
 ```
 
+### minimax-m25-int8-test
+- http://minimax-m25-int8-test.zzai2.scnet.cn:58000:/v1/models ❌
+- Anthropic 协议: ❌
+- OpenAI Responses 协议: 未探测
+- Responses 多轮对话: 示例，未实测
+- Responses 工具调用: 未探测
+- 模型信息: ❌
+- 模型最大上下文长度: N/A
+- 副本数1/1
+
 ### minimax-m25-int8-vip
 - http://minimax-m25-int8-vip.zzai2.scnet.cn:58000:/v1/models ✅
 - Anthropic 协议: ✅
-- OpenAI Responses 协议: ❌
+- OpenAI Responses 协议: ✅
 - Responses 多轮对话: 示例，未实测
-- Responses 工具调用: 未探测
+- Responses 工具调用: ✅
 - 模型信息: /models/MiniMax-M2.5-W8A8
 - 模型最大上下文长度: 196608
-- 副本数50/50
+- 副本数20/20
 请求示例:
 ```bash
 curl -X POST 'http://minimax-m25-int8-vip.zzai2.scnet.cn:58000/v1/chat/completions' \
@@ -566,6 +471,52 @@ curl -X POST 'http://minimax-m25-int8-vip.zzai2.scnet.cn:58000/v1/chat/completio
     "messages": [{"role": "user", "content": "你好"}],
     "temperature": 0.7,
     "stream": false
+  }'
+```
+OpenAI Responses 示例:
+```bash
+curl -X POST 'http://minimax-m25-int8-vip.zzai2.scnet.cn:58000/v1/responses' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "/models/MiniMax-M2.5-W8A8",
+    "input": "你好，请用一句话介绍你自己",
+    "max_output_tokens": 128
+  }'
+```
+OpenAI Responses 多轮示例:
+```bash
+curl -X POST 'http://minimax-m25-int8-vip.zzai2.scnet.cn:58000/v1/responses' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "/models/MiniMax-M2.5-W8A8",
+    "previous_response_id": "<上一轮返回的 id>",
+    "input": "继续展开上一轮回答",
+    "max_output_tokens": 128
+  }'
+```
+OpenAI Responses 工具调用示例:
+```bash
+curl -X POST 'http://minimax-m25-int8-vip.zzai2.scnet.cn:58000/v1/responses' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "/models/MiniMax-M2.5-W8A8",
+    "input": "北京天气如何？如果需要就调用工具。",
+    "tool_choice": "auto",
+    "tools": [
+      {
+        "type": "function",
+        "name": "get_weather",
+        "description": "Get weather by city",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "city": {"type": "string"}
+          },
+          "required": ["city"]
+        }
+      }
+    ],
+    "max_output_tokens": 128
   }'
 ```
 
@@ -715,11 +666,11 @@ curl -X POST 'http://minimax-m27-int8-test.zzai2.scnet.cn:58000/v1/responses' \
 
 ### qwen3-235b-a22b
 - http://qwen3-235b-a22b.zzai2.scnet.cn:58000:/v1/models ✅
-- Anthropic 协议: ❌
-- OpenAI Responses 协议: ❌(404)
+- Anthropic 协议: ✅
+- OpenAI Responses 协议: ✅
 - Responses 多轮对话: 示例，未实测
-- Responses 工具调用: 未探测
-- 模型信息: /data/model/Qwen3-235B-A22B
+- Responses 工具调用: ✅
+- 模型信息: /models/Qwen3-235B-A22B
 - 模型最大上下文长度: 32768
 - 副本数10/10
 请求示例:
@@ -727,10 +678,56 @@ curl -X POST 'http://minimax-m27-int8-test.zzai2.scnet.cn:58000/v1/responses' \
 curl -X POST 'http://qwen3-235b-a22b.zzai2.scnet.cn:58000/v1/chat/completions' \
   -H 'Content-Type: application/json' \
   -d '{
-    "model": "/data/model/Qwen3-235B-A22B",
+    "model": "/models/Qwen3-235B-A22B",
     "messages": [{"role": "user", "content": "你好"}],
     "temperature": 0.7,
     "stream": false
+  }'
+```
+OpenAI Responses 示例:
+```bash
+curl -X POST 'http://qwen3-235b-a22b.zzai2.scnet.cn:58000/v1/responses' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "/models/Qwen3-235B-A22B",
+    "input": "你好，请用一句话介绍你自己",
+    "max_output_tokens": 128
+  }'
+```
+OpenAI Responses 多轮示例:
+```bash
+curl -X POST 'http://qwen3-235b-a22b.zzai2.scnet.cn:58000/v1/responses' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "/models/Qwen3-235B-A22B",
+    "previous_response_id": "<上一轮返回的 id>",
+    "input": "继续展开上一轮回答",
+    "max_output_tokens": 128
+  }'
+```
+OpenAI Responses 工具调用示例:
+```bash
+curl -X POST 'http://qwen3-235b-a22b.zzai2.scnet.cn:58000/v1/responses' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "/models/Qwen3-235B-A22B",
+    "input": "北京天气如何？如果需要就调用工具。",
+    "tool_choice": "auto",
+    "tools": [
+      {
+        "type": "function",
+        "name": "get_weather",
+        "description": "Get weather by city",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "city": {"type": "string"}
+          },
+          "required": ["city"]
+        }
+      }
+    ],
+    "max_output_tokens": 128
   }'
 ```
 
@@ -776,27 +773,6 @@ curl -X POST 'http://qwen3-30b-a3b-instruct-2507.zzai2.scnet.cn:58000/v1/chat/co
   }'
 ```
 
-### qwen3-coder-480b-a35b-instruct
-- http://qwen3-coder-480b.zzai2.scnet.cn:58000:/v1/models ✅
-- Anthropic 协议: ❌
-- OpenAI Responses 协议: ❌(502)
-- Responses 多轮对话: 示例，未实测
-- Responses 工具调用: 未探测
-- 模型信息: Qwen3-Coder-480B-A35B-Instruct
-- 模型最大上下文长度: 262144
-- 副本数4/4
-请求示例:
-```bash
-curl -X POST 'http://qwen3-coder-480b.zzai2.scnet.cn:58000/v1/chat/completions' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model": "Qwen3-Coder-480B-A35B-Instruct",
-    "messages": [{"role": "user", "content": "你好"}],
-    "temperature": 0.7,
-    "stream": false
-  }'
-```
-
 ### qwen35-397b-a17b-int8
 - http://qwen35-397b-a17b-int8.zzai2.scnet.cn:58000:/v1/models ✅
 - Anthropic 协议: ✅
@@ -817,6 +793,10 @@ curl -X POST 'http://qwen35-397b-a17b-int8.zzai2.scnet.cn:58000/v1/chat/completi
     "stream": false
   }'
 ```
+
+### rsync
+- /v1/models ❌
+- 副本数1/1
 
 ### wan22-ti2v-5b-diffusers
 - http://wan22-ti2v-5b-diffusers.zzai2.scnet.cn:58000:/v1/models ✅

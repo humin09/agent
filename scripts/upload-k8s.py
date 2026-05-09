@@ -9,6 +9,19 @@ import re
 
 
 PROTECTED_REMOTE_DIRS = ("/public", "/work", "/data")
+MINIO_BUCKET = "tmp"
+LOCAL_MINIO_ALIAS = "k8s-scp-local"
+AUTO_MINIO_THRESHOLD_BYTES = 100 * 1024 * 1024
+MINIO_ENDPOINTS = {
+    "ks": "http://minio.ksai.scnet.cn:9000",
+    "qd": "http://minio.qdai.scnet.cn:9000",
+    "dz": "http://minio.dzai.scnet.cn:9000",
+    "zz": "http://minio.zzai2.scnet.cn:9000",
+    "wh": "http://minio.whai.scnet.cn:9000",
+    "sz": "http://minio.szai.scnet.cn:9000",
+}
+MINIO_ACCESS_KEY = "admin"
+MINIO_SECRET_KEY = "SugonMinio2024_pro"
 
 
 def parse_remote_path(path):
@@ -83,6 +96,70 @@ def run_command(cmd, timeout=None, capture_output=True):
         text=True,
         timeout=timeout,
     )
+
+
+def ensure_local_mc_alias(context, timeout):
+    endpoint = MINIO_ENDPOINTS.get(context)
+    if not endpoint:
+        raise ValueError(
+            f"Context '{context}' does not have a configured MinIO endpoint"
+        )
+
+    cmd = [
+        "mc",
+        "alias",
+        "set",
+        LOCAL_MINIO_ALIAS,
+        endpoint,
+        MINIO_ACCESS_KEY,
+        MINIO_SECRET_KEY,
+    ]
+    result = run_command(cmd, timeout=timeout)
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip() or result.stdout.strip())
+
+
+def ensure_bucket_exists(alias, timeout):
+    cmd = ["mc", "mb", "--ignore-existing", f"{alias}/{MINIO_BUCKET}"]
+    result = run_command(cmd, timeout=timeout)
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip() or result.stdout.strip())
+
+
+def upload_file_to_minio(context, local_path, object_name=None, timeout=300):
+    try:
+        if not os.path.exists(local_path):
+            print(f"Error: Local file '{local_path}' does not exist")
+            return False
+
+        if os.path.isdir(local_path):
+            print(f"Error: '{local_path}' is a directory, only files are supported")
+            return False
+
+        if object_name is None:
+            object_name = os.path.basename(local_path)
+
+        file_size = os.path.getsize(local_path)
+        print(f"Uploading {local_path} ({file_size} bytes) to MinIO tmp bucket")
+
+        ensure_local_mc_alias(context, timeout)
+        ensure_bucket_exists(LOCAL_MINIO_ALIAS, timeout)
+
+        cmd = ["mc", "cp", local_path, f"{LOCAL_MINIO_ALIAS}/{MINIO_BUCKET}/{object_name}"]
+        print(f"Executing: {format_command_for_log(cmd)}")
+        result = subprocess.run(cmd, timeout=timeout)
+        if result.returncode != 0:
+            raise RuntimeError("mc cp to MinIO failed")
+
+        print(
+            f"File uploaded successfully to: "
+            f"{LOCAL_MINIO_ALIAS}/{MINIO_BUCKET}/{object_name}"
+        )
+        return True
+
+    except Exception as e:
+        print(f"Error: {e}")
+        return False
 
 
 def copy_file_to_node(context, node_ip, local_path, remote_path, timeout=300):
@@ -192,6 +269,14 @@ def copy_file_from_node(context, node_ip, remote_path, local_path, timeout=300):
         return False
 
 
+def choose_minio_object_name(local_path, remote_path):
+    if remote_path:
+        remote_name = posixpath.basename(remote_path.rstrip("/"))
+        if remote_name and remote_name not in {".", "/"}:
+            return remote_name
+    return os.path.basename(local_path)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Kubernetes file transfer - Copy files to/from Kubernetes nodes",
@@ -200,6 +285,9 @@ def main():
 Examples:
   Upload file to node:
     python upload-k8s.py -c qd local_file.txt 10.1.4.9:/remote/path/file.txt
+
+  Upload file to MinIO tmp bucket explicitly:
+    python upload-k8s.py -c qd --minio-only /tmp/large-file.tar.gz
 
   Upload file to /tmp on node (default when path omitted):
     python upload-k8s.py -c qd local_file.txt 10.1.4.9
@@ -229,13 +317,56 @@ Examples:
         help="Command timeout in seconds (default: 300)",
     )
     parser.add_argument(
+        "--minio-only",
+        action="store_true",
+        help="Upload local file to MinIO tmp bucket instead of node copy",
+    )
+    parser.add_argument(
+        "-o",
+        "--object-name",
+        help="Custom object name in MinIO (default: basename of local file)",
+    )
+    parser.add_argument(
+        "--minio-threshold-mb",
+        type=int,
+        default=100,
+        help="Auto-switch local upload to MinIO when file is larger than this size in MB (default: 100)",
+    )
+    parser.add_argument(
+        "--force-node-upload",
+        action="store_true",
+        help="Disable MinIO auto-switch and always upload to node directly",
+    )
+    parser.add_argument(
         "source", help="Source path (local or remote in format node_ip:/path)"
     )
     parser.add_argument(
-        "destination", help="Destination path (local or remote in format node_ip:/path)"
+        "destination",
+        nargs="?",
+        help="Destination path (local or remote in format node_ip:/path)",
     )
 
     args = parser.parse_args()
+
+    if args.minio_only:
+        if args.destination is not None:
+            print("Error: destination is not supported with --minio-only")
+            sys.exit(1)
+        success = upload_file_to_minio(
+            context=args.context,
+            local_path=args.source,
+            object_name=args.object_name,
+            timeout=args.timeout,
+        )
+        if success:
+            print("Operation completed successfully")
+            sys.exit(0)
+        print("Operation failed")
+        sys.exit(1)
+
+    if args.destination is None:
+        print("Error: destination is required unless --minio-only is used")
+        sys.exit(1)
 
     source_is_remote = is_remote_path(args.source, allow_node_only=False)
     dest_is_remote = is_remote_path(args.destination, allow_node_only=True)
@@ -263,13 +394,51 @@ Examples:
     else:
         node_ip, remote_path = parse_remote_path(args.destination)
         local_path = args.source
-        success = copy_file_to_node(
-            context=args.context,
-            node_ip=node_ip,
-            local_path=local_path,
-            remote_path=remote_path,
-            timeout=args.timeout,
-        )
+        threshold_bytes = max(args.minio_threshold_mb, 0) * 1024 * 1024
+        if not os.path.exists(local_path):
+            print(f"Error: Local file '{local_path}' does not exist")
+            sys.exit(1)
+
+        if not os.path.isdir(local_path):
+            file_size = os.path.getsize(local_path)
+            if (
+                not args.force_node_upload
+                and threshold_bytes > 0
+                and file_size > threshold_bytes
+            ):
+                object_name = args.object_name or choose_minio_object_name(
+                    local_path, remote_path
+                )
+                print(
+                    f"File size {file_size} bytes exceeds {threshold_bytes} bytes; "
+                    "switching to MinIO tmp upload"
+                )
+                print(
+                    "Note: destination node path will not be written in MinIO mode; "
+                    f"object name: {object_name}"
+                )
+                success = upload_file_to_minio(
+                    context=args.context,
+                    local_path=local_path,
+                    object_name=object_name,
+                    timeout=args.timeout,
+                )
+            else:
+                success = copy_file_to_node(
+                    context=args.context,
+                    node_ip=node_ip,
+                    local_path=local_path,
+                    remote_path=remote_path,
+                    timeout=args.timeout,
+                )
+        else:
+            success = copy_file_to_node(
+                context=args.context,
+                node_ip=node_ip,
+                local_path=local_path,
+                remote_path=remote_path,
+                timeout=args.timeout,
+            )
 
     if success:
         print("Operation completed successfully")

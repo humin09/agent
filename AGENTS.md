@@ -32,7 +32,11 @@ globs: ["**/*"]
 4. k8s节点登录：
 - 严禁直接 SSH 到集群节点，必须优先 `kubectl node-shell --context <别名> <节点IP> [-- <command>]`.
 - 仅当目标节点 `NotReady/Cordon`，才可通过 kubeasz 跳板 SSH 中转.
-5. 本地和节点文件传输强制使用 `~/agent/scripts/k8s_scp.py` 来进行本地和k8s节点.
+5. 本地和节点文件传输强制使用 `~/agent/scripts/upload-k8s.py`.
+ - 本地文件上传到节点时，默认走 `upload-k8s.py -c <context> <local> <node_ip>:<remote_path>`.
+ - 当上传文件大于 `100M` 时，脚本会自动改走对应集群的 MinIO `tmp` 桶，而不是直接写入节点目标路径。
+ - 需要显式上传到 MinIO 时，使用 `~/agent/scripts/upload-k8s.py --minio-only -c <context> <local_file>`.
+ - `~/agent/scripts/upload-minio-tmp.py` 保留为兼容入口，内部转发到 `upload-k8s.py --minio-only`.
 6. 查询 Codex 当日额度时，优先使用 `~/agent/scripts/codex_quota.py`，避免重复手工打开统计页.
 7. 从 K8s 节点访问外网是强制走 `http/https` 代理的。
 - 凡在节点内执行 `curl` / `wget` / `docker pull` / 包管理器 / 脚本下载 / API 调用等外网访问，必须显式带代理或提前设置 `http_proxy`、`https_proxy`。
@@ -239,20 +243,54 @@ uv run ~/k8s/thanos.py -h
 镜像下载/上传推荐流程：
 ```bash
 kubectl --context <别名> -n ske-model get pod -o wide | grep docker-tmp
-kubectl --context <别名> -n ske-model exec -it <docker-tmp-pod> -- sh
-export http_proxy=http://<user>:<pass>@<代理IP>:<端口>
-export https_proxy=$http_proxy
-docker pull <外网镜像>:<tag>
-docker tag <外网镜像>:<tag> image.ac.com:5000/k8s/<镜像名>:<tag>
+kubectl --context <别名> -n ske-model exec <docker-tmp-pod> -- sh -c '
+docker pull <外网镜像>:<tag> &&
+docker tag <外网镜像>:<tag> image.ac.com:5000/k8s/<镜像名>:<tag> &&
 docker push image.ac.com:5000/k8s/<镜像名>:<tag>
+'
 ```
 
 补充说明：
 - 优先选择与目标网络/机房一致的 `docker-tmp` Pod 执行镜像拉取与推送.
-- 若目标集群节点访问外网需要代理，进入 `docker-tmp` 容器后必须显式设置 `http_proxy`、`https_proxy`.
+- 使用单条非交互 `kubectl exec -- sh -c '...'` 触发任务，避免因长时间挂着 shell 会话而中断.
 - 需要排查镜像同步问题时，优先查询 `docker-tmp` Pod 状态、所在节点和容器日志.
 
-### 3.8 拆分子专题 Skills（按需加载）
+### 3.8 tools-pod：文件传输与模型下载工具集
+
+**部署状态：** ks、qd、dz、zz 四个生产集群已部署
+- 镜像：`image.ac.com:5000/k8s/tools-pod:v1`
+- Namespace：`ske-model`
+- 资源：4c 8g，非 control-plane 节点
+
+**功能：**
+- `rsync`：文件夹复制与同步
+- `modelscope`：模型 Hub 下载工具
+
+**挂载配置：**
+- **ks、qd、dz**：`/work`、`/public`（hostPath）
+- **zz**：`/work2`、`/public`（hostPath），nodeSelector: `groupId=127`
+
+**使用方式：**
+```bash
+# 查询 Pod
+kubectl --context <别名> -n ske-model get pod -l app=tools-pod -o wide
+
+# rsync 示例
+kubectl --context <别名> -n ske-model exec <pod-name> -- rsync -avz /source /dest
+
+# modelscope 下载示例
+kubectl --context <别名> -n ske-model exec <pod-name> -- python -c "
+from modelscope import snapshot_download
+model_dir = snapshot_download('damo/nlp_seqtag_ner_chinese_medical_bert_base')
+"
+
+# 或在 Pod 内交互
+kubectl --context <别名> -n ske-model exec -it <pod-name> -- bash
+```
+
+**环境变量：** 已配置 `http_proxy`、`https_proxy` 等代理环境变量（via ConfigMap），节点外网访问自动走代理。
+
+### 3.9 拆分子专题 Skills（按需加载）
 
 以下章节拆分为独立 Skill，执行相关任务时必须加载：
 - MinIO: `~/agent/minio/SKILL.md`
