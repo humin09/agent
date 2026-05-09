@@ -12,31 +12,43 @@ targets: ["*"]
 
 ### 1.1 集群 MinIO 节点
 
-| 集群 | minio=true 节点 | MinIO server 监听端口 | ex-lb 节点对外监听端口 |
-|------|-----------------|----------------------|------------------------|
-| ks（昆山） | 10.15.200.11, 10.15.200.12 | 19000 | 9000 |
-| qd（青岛） | 10.1.4.11, 10.1.4.12 | 19000 | 9000 |
-| dz（达州） | 10.1.100.9, 10.1.100.10 | 19000 | 9000 |
-| zz（郑州） | 10.13.17.168, 10.13.17.169 | 19000 | 9000 |
+| 集群 | minio=true 节点 | MinIO server 监听端口 | ex-lb 节点对外监听端口 | 当前状态 |
+|------|-----------------|----------------------|------------------------|----------|
+| ks（昆山） | 10.15.200.11, 10.15.200.12 | 19000 | 9000 | ✓ 运行 |
+| qd（青岛） | 10.1.4.11, 10.1.4.12 | 19000 | 9000 | ✓ 运行 |
+| dz（达州） | ❌ 无 minio=true 标签 | — | 9000 | 通过 ex-lb 访问，无后端独立节点 |
+| zz（郑州） | 10.13.17.168, 10.13.17.169 (master节点) | 19000 | 9000 | ✓ 运行 |
 
 说明：
 - MinIO server 进程监听在 `minio=true` 节点的 `19000` 端口
 - ex-lb 节点对外暴露的是 `9000` 端口，由 ex-lb 反向代理到后端 minio 节点的 `19000`
+- **达州 (dz) 当前无独立的后端 MinIO 节点，仅通过 ex-lb 对外暴露，实际对接郑州或其他上游的 MinIO**
 
 
-### 1.2 mc 别名约定（所有 minio=true 节点已统一配置）
+### 1.2 mc 别名约定（各集群 mc-client 部署）
 
-| 别名 | 用途 | 指向 |
-|------|------|------|
-| `origin` | 上游远端 MinIO | 视所在集群而定，可能指向西安 / 郑州 / 昆山 |
-| `local` | 本集群 MinIO | `minio=true` 节点上为 `127.0.0.1:19000`；`ex-lb` 节点上为 `127.0.0.1:9000` |
+**查看配置方式**（优先）：
+```bash
+kubectl --context <别名> -n ske get cm mc-aliases -o yaml | grep "MC_HOST"
+```
+
+| 别名 | 用途 | 指向 | 备注 |
+|------|------|------|------|
+| `origin` | 上游远端 MinIO | 视所在集群而定，见下表 | LFS 同步源 |
+| `xa` | 西安 MinIO | 根据集群不同，可能是 `221.11.21.199` 或 `111.21.179.67` | 备用源 |
+| `local` | 本集群 MinIO | mc-client Pod 中为 `127.0.0.1:9000` | mc-client 运行在 ex-lb 节点 |
+| `<集群别名>` | 其他集群 MinIO | 对应集群的域名 | 如 `ks`, `qd`, `dz`, `zz`, `sz`, `wh` 等 |
 
 所有别名账号：`admin / SugonMinio2024_pro`
 
-`origin` 当前分层指向规则：
-- 郑州：`origin` 指向西安（221.11.21.199）
-- 昆山、青岛、达州：`origin` 指向郑州（minio.zzai2.scnet.cn）
-- 深圳、武汉：`origin` 指向郑州
+**mc-client 部署位置**：各生产集群 `ske` 命名空间，运行在 ex-lb 节点，Pod 通过 ConfigMap `mc-aliases` 自动加载所有 alias
+
+**`origin` 当前分层指向规则**（从 mc-client ConfigMap 确认）：
+- 郑州 (`zz`)：`origin` → `221.11.21.199:9000`（西安）
+- 昆山 (`ks`)：`origin` → `minio.zzai2.scnet.cn:9000`（郑州）
+- 青岛 (`qd`)：`origin` → `minio.zzai2.scnet.cn:9000`（郑州）
+- 达州 (`dz`)：`origin` → `minio.zzai2.scnet.cn:9000`（郑州）
+- 深圳、武汉等：`origin` → `minio.zzai2.scnet.cn:9000`（郑州）
 
 ### 1.3 元数据一致性约束
 
@@ -51,6 +63,19 @@ targets: ["*"]
 - 归一化目标是“同集群所有后端实例的桶元数据语义一致”；若 rule ID、策略 JSON 字段顺序不同但语义一致，也要优先收敛到同一份来源配置。
 
 ## 2. 排障流程
+
+### 2.1 快速查询（推荐首选）— 通过 mc-client Pod
+
+```bash
+# 查看 alias 配置
+kubectl --context <别名> -n ske get cm mc-aliases -o yaml | grep "MC_HOST"
+
+# 通过 mc-client 执行 mc 命令
+kubectl --context <别名> -n ske exec deploy/mc-client -- mc stat local/gitlab-lfs-prod
+kubectl --context <别alias> -n ske exec deploy/mc-client -- mc ls local/
+```
+
+### 2.2 低层节点诊断（仅当 mc-client 不可用）
 
 1. 定位节点：`kubectl --context=<别名> get node -l minio=true -o wide`
 2. 进入节点：`kubectl node-shell --context=<别名> <minio节点IP>`

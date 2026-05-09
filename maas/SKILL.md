@@ -270,7 +270,7 @@ command:
 - 需要把这类同步服务 YAML 与 ske-model 其他服务一样落盘到 chart 目录
 
 ### YAML 落盘规则
-- 昆山和郑州分别保存到 `~/sugon/ske-chart/ske-model/rsync/ks.yaml` 与 `~/sugon/ske-chart/ske-model/rsync/zz.yaml`
+- 昆山和郑州分别保存到 `~/sugon/ske-chart/tools/rsync-ks.yaml` 与 `~/sugon/ske-chart/tools/rsync-zz.yaml`
 - 命名空间固定为 `ske-model`
 - 需要同时保存 `ConfigMap`、`Deployment`、`Service`
 

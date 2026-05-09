@@ -186,7 +186,7 @@ kubeasz 详细配置、组件更新与节点维护规则见：`~/agent/kubeasz/S
 ### 3.5 节点分组与资源组
 
 特殊角色标签：
-- `kubeasz=true`：kubeasz 管理节点（安装维护、镜像中转、跳板）
+- `kubeasz=true`：kubeasz 管理节点（安装维护、跳板）
 - `ex-lb=true`：外部负载均衡节点
 - `app=ske`：平台组件节点
 
@@ -234,15 +234,23 @@ uv run ~/k8s/thanos.py -h
 
 - 集群节点无法访问外网；镜像必须使用内网 Harbor：`image.ac.com:5000/k8s/<镜像名>:<tag>`.
 - 禁止使用 `docker.io` / `ghcr.io` / `quay.io` 作为线上 YAML/Helm/kubectl 镜像地址.
+- 各集群镜像下载与上传不再通过 `kubeasz` 节点中转，统一通过 `ske-model` 命名空间下的 `docker-tmp` DaemonSet 执行.
 
-镜像中转流程：
+镜像下载/上传推荐流程：
 ```bash
-kubectl --context <别名> get node -l kubeasz=true -o wide
-ssh <跳板IP>
+kubectl --context <别名> -n ske-model get pod -o wide | grep docker-tmp
+kubectl --context <别名> -n ske-model exec -it <docker-tmp-pod> -- sh
+export http_proxy=http://<user>:<pass>@<代理IP>:<端口>
+export https_proxy=$http_proxy
 docker pull <外网镜像>:<tag>
 docker tag <外网镜像>:<tag> image.ac.com:5000/k8s/<镜像名>:<tag>
 docker push image.ac.com:5000/k8s/<镜像名>:<tag>
 ```
+
+补充说明：
+- 优先选择与目标网络/机房一致的 `docker-tmp` Pod 执行镜像拉取与推送.
+- 若目标集群节点访问外网需要代理，进入 `docker-tmp` 容器后必须显式设置 `http_proxy`、`https_proxy`.
+- 需要排查镜像同步问题时，优先查询 `docker-tmp` Pod 状态、所在节点和容器日志.
 
 ### 3.8 拆分子专题 Skills（按需加载）
 

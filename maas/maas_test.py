@@ -248,6 +248,13 @@ def summarize_samples(values: Sequence[float]) -> Dict[str, Optional[float]]:
     }
 
 
+def extract_service_name_from_pod(pod_name: str) -> str:
+    match = re.match(r"^(.*)-[a-z0-9]{9,10}-[a-z0-9]{5}$", pod_name)
+    if match:
+        return match.group(1)
+    return pod_name
+
+
 def format_latency_summary(summary: Dict[str, Optional[float]], name: str) -> str:
     if not summary.get("count"):
         return f"  {name}: (no data)"
@@ -369,11 +376,11 @@ async def measure_streaming_request(
         "max_tokens": output_tokens,
         "temperature": 0.1,
         "stream": True,
+        "stream_options": {"include_usage": True},
     }
     start = time.monotonic()
     ttft = None
     e2e = None
-    generated_tokens = 0
     error = None
     try:
         async with session.post(
@@ -387,23 +394,23 @@ async def measure_streaming_request(
                     "req_id": req_id,
                     "ttft": None,
                     "e2e": None,
-                    "generated_tokens": 0,
                     "error": f"HTTP {resp.status}: {body[:200]}",
                 }
             async for raw_line in resp.content:
                 line = raw_line.decode("utf-8").strip()
                 if line.startswith("data: ") and line != "data: [DONE]":
                     chunk = json.loads(line[6:])
-                    delta = chunk.get("choices", [{}])[0].get("delta", {})
+                    choices = chunk.get("choices") or []
+                    if not choices:
+                        continue
+                    delta = choices[0].get("delta", {})
                     content = (
                         delta.get("content")
                         or delta.get("reasoning_content")
                         or delta.get("reasoning")
                     )
-                    if content:
-                        if ttft is None:
-                            ttft = time.monotonic() - start
-                        generated_tokens += 1
+                    if ttft is None:
+                        ttft = time.monotonic() - start
                 elif line == "data: [DONE]":
                     e2e = time.monotonic() - start
                     break
@@ -417,7 +424,6 @@ async def measure_streaming_request(
         "req_id": req_id,
         "ttft": ttft,
         "e2e": e2e,
-        "generated_tokens": generated_tokens,
         "error": error,
     }
 
@@ -458,18 +464,11 @@ async def run_fixed_case(
     errors = [s for s in sample_results if s.get("error")]
     ttfts = [s["ttft"] for s in successes if s.get("ttft") is not None]
     e2es = [s["e2e"] for s in successes if s.get("e2e") is not None]
-    generated_tokens = [float(s["generated_tokens"]) for s in successes]
-    total_generated_tokens = sum(generated_tokens)
-    effective_input_tokens = case.token_length * (1 - case.cache_rate) * len(successes)
-    weighted_tokens = effective_input_tokens * 1 + total_generated_tokens * 10
-    tpm = (weighted_tokens / total_time * 60) if total_time > 0 else 0.0
-    tpm_per_user = tpm / concurrency if concurrency > 0 else 0.0
     ttft_summary = summarize_samples(ttfts)
     e2e_summary = summarize_samples(e2es)
     print(
         f"    Case tokens={case.token_length}, cache={case.cache_rate:.0%}, "
-        f"success={len(successes)}/{len(sample_results)}, "
-        f"TPM={tpm:.0f}, TPM/user={tpm_per_user:.0f}"
+        f"success={len(successes)}/{len(sample_results)}"
     )
     print(format_latency_summary(ttft_summary, "TTFT"))
     print(format_latency_summary(e2e_summary, " E2E"))
@@ -484,17 +483,6 @@ async def run_fixed_case(
         "success_count": len(successes),
         "error_count": len(errors),
         "errors": [{"req_id": e["req_id"], "error": e["error"][:100]} for e in errors[:5]],
-        "generated_tokens": {
-            "per_request": summarize_samples(generated_tokens),
-            "total": total_generated_tokens,
-        },
-        "throughput": {
-            "tpm": tpm,
-            "tpm_per_user": tpm_per_user,
-            "effective_input_tokens": effective_input_tokens,
-            "output_tokens": total_generated_tokens,
-            "weighted_tokens": weighted_tokens,
-        },
         "ttft_seconds": ttft_summary,
         "e2e_seconds": e2e_summary,
     }
@@ -517,7 +505,6 @@ async def run_sustained_case(
         "success_count": 0,
         "error_count": 0,
         "submitted_requests": 0,
-        "generated_tokens_total": 0,
         "ttfts": [],
         "e2es": [],
         "error_samples": [],
@@ -555,7 +542,6 @@ async def run_sustained_case(
             else:
                 consecutive_errors = 0
                 stats["success_count"] += 1
-                stats["generated_tokens_total"] += result.get("generated_tokens", 0)
                 if result.get("ttft") is not None:
                     stats["ttfts"].append(result["ttft"])
                 if result.get("e2e") is not None:
@@ -573,24 +559,18 @@ async def run_sustained_case(
             recent_e2es = stats["e2es"][-concurrency:] if stats["e2es"] else []
             avg_ttft = statistics.mean(recent_ttfts) if recent_ttfts else 0.0
             avg_e2e = statistics.mean(recent_e2es) if recent_e2es else 0.0
-            effective_input_tokens_current = case.token_length * (1 - case.cache_rate) * stats["success_count"]
-            weighted_tokens_current = effective_input_tokens_current * 1 + stats["generated_tokens_total"] * 10
-            tpm_current = (weighted_tokens_current / elapsed * 60) if elapsed > 0 else 0.0
-            tpm_per_user_current = tpm_current / concurrency if concurrency > 0 else 0.0
             snapshot = {
                 "elapsed_s": round(elapsed),
                 "total": total,
                 "success": stats["success_count"],
                 "errors": stats["error_count"],
-                "tpm": round(tpm_current, 0),
-                "tpm_per_user": round(tpm_per_user_current, 0),
                 "recent_avg_ttft": round(avg_ttft, 1),
                 "recent_avg_e2e": round(avg_e2e, 1),
             }
             stats["timeline"].append(snapshot)
             print(
                 f"  [{elapsed:6.0f}s] total={total}, success={stats['success_count']}, "
-                f"errors={stats['error_count']}, TPM={tpm_current:.0f}, TPM/user={tpm_per_user_current:.0f}, "
+                f"errors={stats['error_count']}, "
                 f"recent_avg_ttft={avg_ttft:.1f}s, recent_avg_e2e={avg_e2e:.1f}s"
             )
 
@@ -617,16 +597,9 @@ async def run_sustained_case(
     total_time = time.monotonic() - start_monotonic
     ttft_summary = summarize_samples(stats["ttfts"])
     e2e_summary = summarize_samples(stats["e2es"])
-    effective_input_tokens_final = case.token_length * (1 - case.cache_rate) * stats["success_count"]
-    weighted_tokens_final = effective_input_tokens_final * 1 + stats["generated_tokens_total"] * 10
-    tpm_final = (weighted_tokens_final / total_time * 60) if total_time > 0 else 0.0
-    tpm_per_user_final = tpm_final / concurrency if concurrency > 0 else 0.0
     print(f"\n    End: {datetime.now().isoformat()}")
     print(f"    Wall time: {total_time:.1f}s")
     print(f"    Success: {stats['success_count']}, Errors: {stats['error_count']}")
-    print(f"    Effective input tokens: {effective_input_tokens_final}")
-    print(f"    Total output tokens: {stats['generated_tokens_total']}")
-    print(f"    Overall TPM: {tpm_final:.0f}, TPM/user: {tpm_per_user_final:.0f}")
     print(format_latency_summary(ttft_summary, "TTFT"))
     print(format_latency_summary(e2e_summary, " E2E"))
     return {
@@ -642,16 +615,6 @@ async def run_sustained_case(
         "success_count": stats["success_count"],
         "error_count": stats["error_count"],
         "errors": stats["error_samples"],
-        "generated_tokens": {
-            "total": stats["generated_tokens_total"],
-        },
-        "throughput": {
-            "tpm": tpm_final,
-            "tpm_per_user": tpm_per_user_final,
-            "effective_input_tokens": effective_input_tokens_final,
-            "output_tokens": stats["generated_tokens_total"],
-            "weighted_tokens": weighted_tokens_final,
-        },
         "ttft_seconds": ttft_summary,
         "e2e_seconds": e2e_summary,
         "timeline": stats["timeline"],
@@ -740,33 +703,43 @@ def build_selector_candidates(namespace: str, pod_regex: str) -> List[str]:
 
 def build_default_thanos_queries(
     metrics_namespace: str,
-    pod_regex: str = "",
-) -> Dict[str, List[str]]:
-    dcu_selector_candidates = []
-    if pod_regex:
-        dcu_selector_candidates = [
-            f'dcu_pod_namespace="{metrics_namespace}",dcu_pod_name=~"{pod_regex}"',
-        ]
-
-    def dcu_scoped(metric: str, aggregator: str = "avg") -> List[str]:
-        queries = []
-        for selector in dcu_selector_candidates:
-            queries.append(f"{aggregator}({metric}{{{selector}}})")
-        if not queries:
-            queries = [f"{aggregator}({metric})"]
-        return queries
-
+    pod_name: str,
+    service_name: str,
+) -> Dict[str, str]:
+    dcu_selector = (
+        f'dcu_pod_namespace="{metrics_namespace}",dcu_pod_name="{pod_name}",'
+        'exported_container!="",exported_container!~".*head-1$",device_id!=""'
+    )
     return {
-        "dcu_utilization_percent": dcu_scoped("dcu_container_dcu_util"),
-        "dcu_mem_utilization_percent": dcu_scoped("dcu_container_mem_util"),
-        "dcu_power_watts": dcu_scoped("dcu_power_usage"),
-        "dcu_hbm_bandwidth_mbps": dcu_scoped("dcu_df_bw_read_write"),
+        "rpm": (
+            f'sum(rate(nginx_ingress_controller_request_duration_seconds_count{{controller_class="k8s.io/ingress-maas",'
+            f'exported_namespace="{metrics_namespace}",exported_service="{service_name}"}}[5m])) * 60'
+        ),
+        "input_tps": f'sum(rate(vllm:prompt_tokens_total{{namespace="{metrics_namespace}",service="{service_name}"}}[5m]))',
+        "output_tps": f'sum(rate(vllm:generation_tokens_total{{namespace="{metrics_namespace}",service="{service_name}"}}[5m]))',
+        "total_tps": (
+            f'sum(rate(vllm:prompt_tokens_total{{namespace="{metrics_namespace}",service="{service_name}"}}[5m])) + '
+            f'sum(rate(vllm:generation_tokens_total{{namespace="{metrics_namespace}",service="{service_name}"}}[5m]))'
+        ),
+        "itl_avg": (
+            f'sum(rate(vllm:inter_token_latency_seconds_sum{{namespace="{metrics_namespace}",service="{service_name}"}}[5m])) / '
+            f'clamp_min(sum(rate(vllm:inter_token_latency_seconds_count{{namespace="{metrics_namespace}",service="{service_name}"}}[5m])), 1e-10)'
+        ),
+        "dcu_utilization_avg": f"avg(dcu_container_dcu_util{{{dcu_selector}}})",
+        "memory_utilization_avg": f"avg(dcu_container_mem_util{{{dcu_selector}}}) * 100",
+        "prefix_cache_hit_rate_avg": (
+            f"(sum(rate(vllm:gpu_prefix_cache_hits_total{{namespace=\"{metrics_namespace}\",service=\"{service_name}\"}}[5m])) "
+            f"/ clamp_min(sum(rate(vllm:gpu_prefix_cache_queries_total{{namespace=\"{metrics_namespace}\",service=\"{service_name}\"}}[5m])), 1e-10)) "
+            f"or (sum(rate(vllm:prefix_cache_hits_total{{namespace=\"{metrics_namespace}\",service=\"{service_name}\"}}[5m])) "
+            f"/ clamp_min(sum(rate(vllm:prefix_cache_queries_total{{namespace=\"{metrics_namespace}\",service=\"{service_name}\"}}[5m])), 1e-10))"
+        ),
+        "kv_cache_usage_avg": f"avg(vllm:kv_cache_usage_perc{{namespace=\"{metrics_namespace}\",service=\"{service_name}\"}})",
     }
 
 
 def collect_thanos_metrics(
     thanos_context: str,
-    queries: Dict[str, List[str]],
+    queries: Dict[str, str],
     start_time: datetime,
     end_time: datetime,
     step: str,
@@ -790,39 +763,27 @@ def collect_thanos_metrics(
         "results": {},
     }
 
-    for name, promql_candidates in queries.items():
-        attempts = []
-        selected_result = None
-        for promql in promql_candidates:
-            try:
-                result = client.query_range(promql, start=query_start, end=query_end, step=step)
-                values = flatten_query_values(result)
-                attempt = {
+    for name, promql in queries.items():
+        try:
+            result = client.query_range(promql, start=query_start, end=query_end, step=step)
+            values = flatten_query_values(result)
+            if values:
+                summary = summarize_samples(values)
+                metrics["results"][name] = {
                     "promql": promql,
                     "series_count": len(result.get("data", {}).get("result", [])),
                     "sample_count": len(values),
+                    "avg": summary["avg"],
                 }
-                attempts.append(attempt)
-                if values and selected_result is None:
-                    selected_result = {
-                        "promql": promql,
-                        "values": values,
-                        "series_count": attempt["series_count"],
-                    }
-            except Exception as exc:
-                attempts.append({"promql": promql, "error": str(exc)[:200]})
-
-        if selected_result is not None:
+            else:
+                metrics["results"][name] = {
+                    "promql": promql,
+                    "error": "thanos query returned no samples",
+                }
+        except Exception as exc:
             metrics["results"][name] = {
-                "selected_promql": selected_result["promql"],
-                "summary": summarize_samples(selected_result["values"]),
-                "series_count": selected_result["series_count"],
-                "attempts": attempts,
-            }
-        else:
-            metrics["results"][name] = {
-                "error": "no thanos query candidate returned samples",
-                "attempts": attempts,
+                "promql": promql,
+                "error": str(exc)[:200],
             }
     return metrics
 
@@ -1006,11 +967,14 @@ async def run_benchmark_matrix(
     save_intermediate: bool = True,
 ) -> Dict[str, Any]:
     model = resolve_model(args, base_url)
+    pod_name = pod_regex.split("|")[0]
+    service_name = extract_service_name_from_pod(pod_name)
     thanos_queries = build_default_thanos_queries(
         metrics_namespace=args.metrics_namespace,
-        pod_regex=pod_regex,
+        pod_name=pod_name,
+        service_name=service_name,
     )
-    thanos_queries.update({name: [promql] for name, promql in parse_named_queries(args.thanos_query).items()})
+    thanos_queries.update(parse_named_queries(args.thanos_query))
     all_results: Dict[str, Any] = {
         "test_start_time": datetime.now().isoformat(),
         "target": result_prefix["target"],
