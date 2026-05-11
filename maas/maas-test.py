@@ -1,29 +1,30 @@
 #!/usr/bin/env python3
 """
-Maas benchmark toolkit - Pod-based performance testing via kubectl port-forward.
+Maas benchmark toolkit - Pod-based performance testing within K8s cluster.
 
-Usage:
-  uv run maas_test.py --deployment-name minimax-m25-int8-yy --token-lengths 20000 --cache-rates 0.0
-  uv run maas_test.py --context ks --deployment-name minimax-m27-int8 --token-lengths 20000 80000
+Usage (inside ske-model-tool pod):
+  python maas-test.py --service minimax-m25-int8-yy --token-lengths 20000 --cache-rates 0.0
+  python maas-test.py --service minimax-m27-int8 --token-lengths 20000 80000 --cache-rates 0.0 0.8
 """
 
 import argparse
 import asyncio
 import json
+import os
 import random
-import re
 import statistics
-import subprocess
 import sys
 import time
+import urllib.parse
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
-sys.path.insert(0, str(Path("~/k8s").expanduser()))
-from thanos import ThanosClient
-
+try:
+    import requests
+except ImportError:
+    requests = None
 
 DEFAULT_TOKEN_LENGTHS = [20000, 40000, 80000, 120000]
 DEFAULT_CACHE_RATES = [0.0, 0.4, 0.8]
@@ -32,8 +33,11 @@ DEFAULT_NAMESPACE = "ske-model"
 DEFAULT_OUTPUT_TOKENS_PER_REQUEST = 256
 DEFAULT_CONCURRENCY = 24
 DEFAULT_BENCHMARK_MODE = "fixed"
-LOCAL_PORT = 8000
-REMOTE_PORT = 8000
+SERVICE_PORT = 8000
+VM_CLUSTER_ENDPOINTS = {
+    "zz": "https://vm-cluster.zzai2.scnet.cn:58043/select/0/prometheus/api/v1",
+    "ks": "https://vm-cluster.ksai.scnet.cn:58043/select/0/prometheus/api/v1",
+}
 
 CACHE_BASE_TEXTS: Dict[int, str] = {}
 BASE_TEXT_VARIANTS = [
@@ -94,13 +98,6 @@ def summarize_samples(values: Sequence[float]) -> Dict[str, Optional[float]]:
     }
 
 
-def extract_service_name_from_pod(pod_name: str) -> str:
-    match = re.match(r"^(.*)-[a-z0-9]{9,10}-[a-z0-9]{5}$", pod_name)
-    if match:
-        return match.group(1)
-    return pod_name
-
-
 def format_latency_summary(summary: Dict[str, Optional[float]], name: str) -> str:
     if not summary.get("count"):
         return f"  {name}: (no data)"
@@ -108,37 +105,6 @@ def format_latency_summary(summary: Dict[str, Optional[float]], name: str) -> st
         f"  {name}: min={summary['min']:.2f}s, avg={summary['avg']:.2f}s, "
         f"p50={summary['p50']:.2f}s, p95={summary['p95']:.2f}s, max={summary['max']:.2f}s"
     )
-
-
-def run_cmd(
-    cmd: Sequence[str],
-    description: str,
-    timeout: int = 300,
-    check: bool = True,
-) -> str:
-    print(f"\n>>> {description}")
-    print(f"    Command: {' '.join(cmd)}")
-    result = subprocess.run(
-        list(cmd),
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-    )
-    if check and result.returncode != 0:
-        raise CommandError(
-            f"{description} failed with exit code {result.returncode}\n"
-            f"STDOUT:\n{result.stdout[-1000:]}\n"
-            f"STDERR:\n{result.stderr[-1000:]}"
-        )
-    if result.returncode != 0:
-        print(f"    WARNING: exit code={result.returncode}")
-        if result.stderr:
-            print(f"    STDERR: {result.stderr[:500]}")
-    return result.stdout
-
-
-def kubectl_base_cmd(context: str, namespace: str = DEFAULT_NAMESPACE) -> List[str]:
-    return ["kubectl", "--context", context, "-n", namespace]
 
 
 def generate_fixed_input(target_tokens: int, seed: int = 42) -> str:
@@ -497,7 +463,62 @@ async def run_single_case(
     )
 
 
-def flatten_query_values(result: Dict[str, Any]) -> List[float]:
+def save_results(result_log: str, payload: Dict[str, Any]) -> None:
+    path = Path(result_log)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"\n>>> Results saved to {path}")
+
+
+def build_default_vm_queries(service_name: str) -> Dict[str, str]:
+    """Build Prometheus queries for vm-cluster."""
+    return {
+        "input_tps": f'sum(rate(vllm:prompt_tokens_total{{service="{service_name}"}}[5m]))',
+        "output_tps": f'sum(rate(vllm:generation_tokens_total{{service="{service_name}"}}[5m]))',
+        "total_tps": (
+            f'sum(rate(vllm:prompt_tokens_total{{service="{service_name}"}}[5m])) + '
+            f'sum(rate(vllm:generation_tokens_total{{service="{service_name}"}}[5m]))'
+        ),
+        "itl_avg": (
+            f'sum(rate(vllm:inter_token_latency_seconds_sum{{service="{service_name}"}}[5m])) / '
+            f'clamp_min(sum(rate(vllm:inter_token_latency_seconds_count{{service="{service_name}"}}[5m])), 1e-10)'
+        ),
+        "prefix_cache_hit_rate_avg": (
+            f"sum(rate(vllm:prefix_cache_hits_total{{service=\"{service_name}\"}}[5m])) / "
+            f"clamp_min(sum(rate(vllm:prefix_cache_queries_total{{service=\"{service_name}\"}}[5m])), 1e-10)"
+        ),
+        "kv_cache_usage_avg": f"avg(vllm:kv_cache_usage_perc{{service=\"{service_name}\"}})",
+    }
+
+
+def query_vm_cluster(promql: str, start_time: float, end_time: float, step: str = "30s", endpoint: str = None) -> Dict[str, Any]:
+    """Query vm-cluster via Prometheus API."""
+    if not requests:
+        raise CommandError("requests library not available; install it to use vm-cluster queries")
+
+    if not endpoint:
+        endpoint = VM_CLUSTER_ENDPOINTS.get("zz", VM_CLUSTER_ENDPOINTS["zz"])
+
+    url = f"{endpoint}/query_range"
+    params = {
+        "query": promql,
+        "start": int(start_time),
+        "end": int(end_time),
+        "step": step,
+    }
+    try:
+        resp = requests.get(url, params=params, timeout=30)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as exc:
+        print(f"    WARNING: vm-cluster query failed: {exc}")
+        return {"status": "error", "error": str(exc)[:200]}
+
+
+def flatten_vm_query_values(result: Dict[str, Any]) -> List[float]:
+    """Extract values from vm-cluster query result."""
+    if result.get("status") != "success":
+        return []
     series = result.get("data", {}).get("result", [])
     values: List[float] = []
     for item in series:
@@ -509,102 +530,28 @@ def flatten_query_values(result: Dict[str, Any]) -> List[float]:
     return values
 
 
-def parse_named_queries(raw_queries: Sequence[str]) -> Dict[str, str]:
-    parsed: Dict[str, str] = {}
-    for raw_query in raw_queries:
-        if "=" not in raw_query:
-            raise CommandError(f"invalid --thanos-query value {raw_query!r}, expected name=promql")
-        name, promql = raw_query.split("=", 1)
-        metric_name = name.strip()
-        promql_value = promql.strip()
-        if not metric_name or not promql_value:
-            raise CommandError(
-                f"invalid --thanos-query value {raw_query!r}, expected non-empty name and promql"
-            )
-        parsed[metric_name] = promql_value
-    return parsed
-
-
-def build_selector_candidates(namespace: str, pod_regex: str) -> List[str]:
-    candidates = [
-        f'namespace="{namespace}",pod=~"{pod_regex}"',
-        f'exported_namespace="{namespace}",pod=~"{pod_regex}"',
-        f'namespace="{namespace}",pod_name=~"{pod_regex}"',
-        f'exported_namespace="{namespace}",pod_name=~"{pod_regex}"',
-        f'pod=~"{pod_regex}"',
-        f'pod_name=~"{pod_regex}"',
-    ]
-    deduplicated: List[str] = []
-    seen = set()
-    for candidate in candidates:
-        if candidate not in seen:
-            deduplicated.append(candidate)
-            seen.add(candidate)
-    return deduplicated
-
-
-def build_default_thanos_queries(
-    metrics_namespace: str,
-    pod_name: str,
-    service_name: str,
-) -> Dict[str, str]:
-    dcu_selector = (
-        f'dcu_pod_namespace="{metrics_namespace}",dcu_pod_name="{pod_name}",'
-        'exported_container!="",exported_container!~".*head-1$",device_id!=""'
-    )
-    return {
-        "input_tps": f'sum(rate(vllm:prompt_tokens_total{{namespace="{metrics_namespace}",service="{service_name}"}}[5m]))',
-        "output_tps": f'sum(rate(vllm:generation_tokens_total{{namespace="{metrics_namespace}",service="{service_name}"}}[5m]))',
-        "total_tps": (
-            f'sum(rate(vllm:prompt_tokens_total{{namespace="{metrics_namespace}",service="{service_name}"}}[5m])) + '
-            f'sum(rate(vllm:generation_tokens_total{{namespace="{metrics_namespace}",service="{service_name}"}}[5m]))'
-        ),
-        "itl_avg": (
-            f'sum(rate(vllm:inter_token_latency_seconds_sum{{namespace="{metrics_namespace}",service="{service_name}"}}[5m])) / '
-            f'clamp_min(sum(rate(vllm:inter_token_latency_seconds_count{{namespace="{metrics_namespace}",service="{service_name}"}}[5m])), 1e-10)'
-        ),
-        "dcu_utilization_avg": f"avg(dcu_container_dcu_util{{{dcu_selector}}})",
-        "memory_utilization_avg": f"avg(dcu_container_mem_util{{{dcu_selector}}}) * 100",
-        "prefix_cache_hit_rate_avg": (
-            f"(sum(rate(vllm:gpu_prefix_cache_hits_total{{namespace=\"{metrics_namespace}\",service=\"{service_name}\"}}[5m])) "
-            f"/ clamp_min(sum(rate(vllm:gpu_prefix_cache_queries_total{{namespace=\"{metrics_namespace}\",service=\"{service_name}\"}}[5m])), 1e-10)) "
-            f"or (sum(rate(vllm:prefix_cache_hits_total{{namespace=\"{metrics_namespace}\",service=\"{service_name}\"}}[5m])) "
-            f"/ clamp_min(sum(rate(vllm:prefix_cache_queries_total{{namespace=\"{metrics_namespace}\",service=\"{service_name}\"}}[5m])), 1e-10))"
-        ),
-        "kv_cache_usage_avg": f"avg(vllm:kv_cache_usage_perc{{namespace=\"{metrics_namespace}\",service=\"{service_name}\"}})",
-    }
-
-
-def collect_thanos_metrics(
-    thanos_context: str,
+def collect_vm_metrics(
     queries: Dict[str, str],
     start_time: datetime,
     end_time: datetime,
-    step: str,
-    trim_seconds: int,
+    step: str = "30s",
+    endpoint: str = None,
 ) -> Dict[str, Any]:
-    query_start = start_time.timestamp() + trim_seconds
-    query_end = end_time.timestamp() - trim_seconds
-    if query_start >= query_end:
-        query_start = start_time.timestamp()
-        query_end = end_time.timestamp()
-
-    client = ThanosClient(thanos_context)
+    """Collect metrics from vm-cluster."""
     metrics: Dict[str, Any] = {
         "window": {
-            "start_time": datetime.fromtimestamp(query_start).isoformat(),
-            "end_time": datetime.fromtimestamp(query_end).isoformat(),
+            "start_time": start_time.isoformat(),
+            "end_time": end_time.isoformat(),
             "step": step,
-            "trim_seconds": trim_seconds,
         },
         "queries": queries,
         "results": {},
     }
 
     for name, promql in queries.items():
-        try:
-            result = client.query_range(promql, start=query_start, end=query_end, step=step)
-            values = flatten_query_values(result)
+        result = query_vm_cluster(promql, start_time.timestamp(), end_time.timestamp(), step, endpoint=endpoint)
+        if result.get("status") == "success":
+            values = flatten_vm_query_values(result)
             if values:
                 summary = summarize_samples(values)
                 metrics["results"][name] = {
@@ -616,97 +563,28 @@ def collect_thanos_metrics(
             else:
                 metrics["results"][name] = {
                     "promql": promql,
-                    "error": "thanos query returned no samples",
+                    "error": "query returned no samples",
                 }
-        except Exception as exc:
+        else:
             metrics["results"][name] = {
                 "promql": promql,
-                "error": str(exc)[:200],
+                "error": result.get("error", "unknown error"),
             }
     return metrics
-
-
-def save_results(result_log: str, payload: Dict[str, Any]) -> None:
-    path = Path(result_log)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"\n>>> Results saved to {path}")
-
-
-def get_deployment_json(context: str, deployment_name: str, namespace: str = DEFAULT_NAMESPACE) -> Dict[str, Any]:
-    output = run_cmd(
-        kubectl_base_cmd(context, namespace) + ["get", "deploy", deployment_name, "-o", "json"],
-        description="Fetch deployment json",
-        timeout=60,
-    )
-    return json.loads(output)
-
-
-def build_label_selector(match_labels: Dict[str, str]) -> str:
-    return ",".join(f"{key}={value}" for key, value in match_labels.items())
-
-
-def get_pod_regex(
-    context: str,
-    deployment: Dict[str, Any],
-    deployment_name: str,
-    namespace: str = DEFAULT_NAMESPACE,
-) -> str:
-    match_labels = deployment["spec"]["selector"]["matchLabels"]
-    label_selector = build_label_selector(match_labels)
-    output = run_cmd(
-        kubectl_base_cmd(context, namespace) + ["get", "pods", "-l", label_selector, "-o", "json"],
-        description=f"Fetch pods for deployment {deployment_name}",
-        timeout=60,
-    )
-    pod_items = json.loads(output).get("items", [])
-    pod_names = sorted(item["metadata"]["name"] for item in pod_items)
-    if not pod_names:
-        raise CommandError("no pods found for deployment selector")
-    return "|".join(pod_names)
-
-
-def get_first_pod_name(context: str, deployment: Dict[str, Any], namespace: str = DEFAULT_NAMESPACE) -> str:
-    match_labels = deployment["spec"]["selector"]["matchLabels"]
-    label_selector = build_label_selector(match_labels)
-    output = run_cmd(
-        kubectl_base_cmd(context, namespace) + ["get", "pods", "-l", label_selector, "-o", "json"],
-        description="Fetch pods for deployment",
-        timeout=60,
-    )
-    pod_items = json.loads(output).get("items", [])
-    pod_names = sorted(item["metadata"]["name"] for item in pod_items)
-    if not pod_names:
-        raise CommandError("no pods found for deployment selector")
-    return pod_names[0]
-
-
-def start_port_forward(context: str, pod_name: str, local_port: int = 8000, remote_port: int = 8000, namespace: str = DEFAULT_NAMESPACE) -> subprocess.Popen:
-    cmd = kubectl_base_cmd(context, namespace) + ["port-forward", f"pod/{pod_name}", f"{local_port}:{remote_port}"]
-    print(f"\n>>> Starting port-forward: {' '.join(cmd)}")
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    time.sleep(2)
-    if proc.poll() is not None:
-        stdout, stderr = proc.communicate()
-        raise CommandError(f"port-forward failed: {stderr}")
-    print(f"    Port-forward started (PID: {proc.pid})")
-    return proc
 
 
 async def run_benchmark_matrix(
     *,
     args: argparse.Namespace,
     base_url: str,
-    pod_name: str,
+    service_name: str,
+    vm_endpoint: str,
     result_prefix: Dict[str, Any],
 ) -> Dict[str, Any]:
     model = resolve_model(args, base_url)
-    service_name = extract_service_name_from_pod(pod_name)
-    thanos_queries = build_default_thanos_queries(
-        metrics_namespace=args.namespace,
-        pod_name=pod_name,
-        service_name=service_name,
-    )
-    thanos_queries.update(parse_named_queries(args.thanos_query))
+
+    vm_queries = build_default_vm_queries(service_name) if requests else {}
+
     all_results: Dict[str, Any] = {
         "test_start_time": datetime.now().isoformat(),
         "target": result_prefix["target"],
@@ -719,15 +597,14 @@ async def run_benchmark_matrix(
             "benchmark_mode": args.benchmark_mode,
             "duration_seconds": args.duration_seconds,
             "report_interval_seconds": args.report_interval_seconds,
-            "thanos_step": args.thanos_step,
-            "thanos_trim_seconds": args.thanos_trim_seconds,
+            "vm_step": args.vm_step,
+            "vm_trim_seconds": args.vm_trim_seconds,
             "request_timeout_seconds": args.request_timeout_seconds,
             "output_tokens": args.output_tokens,
         },
         "baseline": {
             **result_prefix.get("baseline", {}),
-            "pod_name": pod_name,
-            "thanos_queries": thanos_queries,
+            "vm_queries": vm_queries,
         },
         "results": [],
         "test_end_time": None,
@@ -751,21 +628,27 @@ async def run_benchmark_matrix(
                 model=model,
             )
             case_end = datetime.now()
-            thanos_metrics = collect_thanos_metrics(
-                thanos_context=args.thanos_context or args.context,
-                queries=thanos_queries,
-                start_time=case_start,
-                end_time=case_end,
-                step=args.thanos_step,
-                trim_seconds=args.thanos_trim_seconds,
-            )
+
+            vm_metrics = {}
+            if requests:
+                trim_start = case_start.timestamp() + args.vm_trim_seconds
+                trim_end = case_end.timestamp() - args.vm_trim_seconds
+                if trim_start < trim_end:
+                    vm_metrics = collect_vm_metrics(
+                        vm_queries,
+                        datetime.fromtimestamp(trim_start),
+                        datetime.fromtimestamp(trim_end),
+                        step=args.vm_step,
+                        endpoint=vm_endpoint,
+                    )
+
             all_results["results"].append(
                 {
                     "case": asdict(case),
                     "start_time": case_start.isoformat(),
                     "end_time": case_end.isoformat(),
                     "benchmark": benchmark_summary,
-                    "thanos": thanos_metrics,
+                    "vm_metrics": vm_metrics,
                 }
             )
             save_results(args.result_log, all_results)
@@ -781,15 +664,12 @@ def resolve_model(args: argparse.Namespace, base_url: str) -> str:
     return detect_model(base_url)
 
 
-def print_benchmark_summary(args: argparse.Namespace, title: str, pod_name: str, base_url: str) -> None:
+def print_benchmark_summary(args: argparse.Namespace, title: str, base_url: str) -> None:
     total_cases = len(args.token_lengths) * len(args.cache_rates)
     print("=" * 100)
     print(title)
     print("=" * 100)
-    print(f"Context: {args.context}")
-    print(f"Namespace: {args.namespace}")
-    print(f"Deployment: {args.deployment_name}")
-    print(f"Pod: {pod_name}")
+    print(f"Service: {args.service}")
     print(f"Base URL: {base_url}")
     print(f"Model: {args.model or '(auto-detect)'}")
     print(f"Token lengths: {args.token_lengths}")
@@ -808,28 +688,19 @@ def print_benchmark_summary(args: argparse.Namespace, title: str, pod_name: str,
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Benchmark vLLM pod via kubectl port-forward.",
+        description="Benchmark vLLM service within K8s cluster.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""\
 examples:
-  uv run %(prog)s --context zz --deployment-name minimax-m25-int8-yy \\
+  python maas-test.py --service minimax-m25-int8-yy \\
       --token-lengths 20000 --cache-rates 0.0
 
-  uv run %(prog)s --context ks --deployment-name minimax-m27-int8 \\
+  python maas-test.py --service minimax-m27-int8 \\
       --token-lengths 20000 80000 --cache-rates 0.0 0.8
 """,
     )
-    parser.add_argument("--context", default="zz", help="kubectl context alias")
-    parser.add_argument("--namespace", default=DEFAULT_NAMESPACE, help="target deployment namespace")
-    parser.add_argument("--deployment-name", required=True, help="target deployment name")
+    parser.add_argument("--service", required=True, help="target vLLM service name (K8s DNS)")
     parser.add_argument("--model", default=None, help="model name for API requests; auto-detected if omitted")
-    parser.add_argument("--thanos-context", default=None, help="Thanos cluster alias; defaults to --context")
-    parser.add_argument(
-        "--thanos-query",
-        action="append",
-        default=[],
-        help="override metric query as name=promql; e.g. --thanos-query gpu=avg(dcu_util{...})",
-    )
     parser.add_argument(
         "--token-lengths",
         type=int,
@@ -847,8 +718,8 @@ examples:
     parser.add_argument("--concurrency", type=int, default=DEFAULT_CONCURRENCY, help="concurrent requests per case")
     parser.add_argument("--total-requests", type=int, default=48, help="total requests per case (fixed mode)")
     parser.add_argument("--result-log", default=DEFAULT_RESULT_LOG, help="output json file")
-    parser.add_argument("--thanos-step", default="30s", help="step for thanos query_range")
-    parser.add_argument("--thanos-trim-seconds", type=int, default=0, help="trim benchmark window edges")
+    parser.add_argument("--vm-step", default="30s", help="step for vm-cluster query_range")
+    parser.add_argument("--vm-trim-seconds", type=int, default=0, help="trim benchmark window edges before querying vm-cluster")
     parser.add_argument("--request-timeout-seconds", type=int, default=600, help="per request timeout")
     parser.add_argument(
         "--benchmark-mode",
@@ -859,6 +730,7 @@ examples:
     parser.add_argument("--duration-seconds", type=int, default=600, help="duration for sustained mode")
     parser.add_argument("--report-interval-seconds", type=int, default=30, help="live report interval for sustained mode")
     parser.add_argument("--output-tokens", type=int, default=DEFAULT_OUTPUT_TOKENS_PER_REQUEST, help="max_tokens per request")
+    parser.add_argument("--vm-cluster-endpoint", default=None, help="vm-cluster Prometheus API endpoint; auto-detect from cluster if not provided")
 
     args = parser.parse_args()
     if args.concurrency <= 0:
@@ -874,62 +746,46 @@ examples:
     return args
 
 
-async def orchestrate(args: argparse.Namespace):
-    deployment = get_deployment_json(args.context, args.deployment_name, args.namespace)
-    pod_name = get_first_pod_name(args.context, deployment, args.namespace)
-
-    forward_proc = None
+async def main() -> int:
+    args = parse_args()
     try:
-        forward_proc = start_port_forward(
-            args.context,
-            pod_name,
-            LOCAL_PORT,
-            REMOTE_PORT,
-            args.namespace,
-        )
-        base_url = f"http://localhost:{LOCAL_PORT}/v1/chat/completions"
+        base_url = f"http://{args.service}:{SERVICE_PORT}/v1/chat/completions"
 
-        print_benchmark_summary(args, "vLLM pod benchmark (port-forward)", pod_name, base_url)
+        # 自动检测或使用指定的 vm-cluster endpoint
+        if args.vm_cluster_endpoint:
+            vm_endpoint = args.vm_cluster_endpoint
+        else:
+            cluster_context = os.environ.get("CLUSTER_CONTEXT", "zz")
+            vm_endpoint = VM_CLUSTER_ENDPOINTS.get(cluster_context, VM_CLUSTER_ENDPOINTS["zz"])
+            print(f"Auto-detected cluster context: {cluster_context}")
 
-        return await run_benchmark_matrix(
+        print_benchmark_summary(args, "vLLM service benchmark (K8s cluster)", base_url)
+
+        await run_benchmark_matrix(
             args=args,
             base_url=base_url,
-            pod_name=pod_name,
+            service_name=args.service,
+            vm_endpoint=vm_endpoint,
             result_prefix={
                 "target": {
-                    "context": args.context,
-                    "namespace": args.namespace,
-                    "deployment_name": args.deployment_name,
-                    "pod_name": pod_name,
-                    "thanos_context": args.thanos_context or args.context,
-                    "mode": "pod-forward",
+                    "service": args.service,
+                    "mode": "k8s-service",
                     "base_url": base_url,
+                    "vm_cluster_endpoint": vm_endpoint,
                 },
                 "baseline": {},
             },
         )
-    finally:
-        if forward_proc:
-            forward_proc.terminate()
-            try:
-                forward_proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                forward_proc.kill()
-            print("\n>>> Port-forward terminated")
-
-
-def main() -> int:
-    args = parse_args()
-    try:
-        asyncio.run(orchestrate(args))
+        return 0
     except KeyboardInterrupt:
         print("\nInterrupted by user")
         return 130
     except Exception as exc:
         print(f"\nERROR: {exc}")
+        import traceback
+        traceback.print_exc()
         return 1
-    return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(asyncio.run(main()))

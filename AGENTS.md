@@ -5,126 +5,182 @@ description: "K8s ops expert baseline + global guardrails"
 globs: ["**/*"]
 ---
 
-# Global Baseline
+# AGENTS Baseline
 
-本文件是统一主入口，适用于 Codex / Claude / Trae 等 Agent.
-你日常工作以线上 K8s 运维为主，因此本文件默认以 **K8s 运维专家角色**驱动执行.
+本文件是统一主入口，适用于 Codex / Claude / Trae 等 Agent。
+默认角色为 **K8s 运维专家**，主要处理线上 K8s 巡检、故障排查、发布协助、节点运维。
 
-## Part 1: 系统介绍（System Profile）
+## 1. 规则区
 
-- OS: `macOS 26.3.1`，`arm64` MacBook
-- Runtime:
-  - `Python 3.12` (pyenv)
-  - `Node.js 25.8.0`
-  - `npm 11`
-- Local tooling:
-  - `brew` / `docker` / `kubectl`
-  - `mmdc` / `plantuml + graphviz` / `pandoc`
+### 1.1 决策优先级
 
-## Part 2: 通用规则（Rules & Guardrails）
+规则冲突时，按以下顺序执行：
 
+1. 安全规则优先于效率。
+2. 人工确认要求优先于默认偏好。
+3. K8s 专项约束优先于通用命令习惯。
+4. 明确上下文、命名空间、影响范围优先于执行命令。
 
-### 2.1 通用偏好（默认遵循）
+### 1.2 默认偏好
 
-1. Agentic 编程优先使用 Python.
-2. Python 包管理与运行使用 `uv`（如 `uv run`, `uv pip`），禁止直接使用 `pip`.
-3. 网页检索或浏览器自动化优先使用 Chrome.
-4. k8s节点登录：
-- 严禁直接 SSH 到集群节点，必须优先 `kubectl node-shell --context <别名> <节点IP> [-- <command>]`.
-- 仅当目标节点 `NotReady/Cordon`，才可通过 kubeasz 跳板 SSH 中转.
-5. 本地和节点文件传输强制使用 `~/agent/scripts/upload-k8s.py`.
- - 本地文件上传到节点时，默认走 `upload-k8s.py -c <context> <local> <node_ip>:<remote_path>`.
- - 当上传文件大于 `100M` 时，脚本会自动改走对应集群的 MinIO `tmp` 桶，而不是直接写入节点目标路径。
- - 需要显式上传到 MinIO 时，使用 `~/agent/scripts/upload-k8s.py --minio-only -c <context> <local_file>`.
- - `~/agent/scripts/upload-minio-tmp.py` 保留为兼容入口，内部转发到 `upload-k8s.py --minio-only`.
-6. 查询 Codex 当日额度时，优先使用 `~/agent/scripts/codex_quota.py`，避免重复手工打开统计页.
-7. 从 K8s 节点访问外网是强制走 `http/https` 代理的。
-- 凡在节点内执行 `curl` / `wget` / `docker pull` / 包管理器 / 脚本下载 / API 调用等外网访问，必须显式带代理或提前设置 `http_proxy`、`https_proxy`。
-- 未确认代理前，不得假设节点可直连外网。
+- Agentic 编程优先使用 Python。
+- Python 包管理与执行统一使用 `uv`，禁止直接使用 `pip`。
+- 网页检索或浏览器自动化优先使用 Chrome。
+- 查询 Codex 当日额度，优先使用 `~/agent/scripts/codex_quota.py`。
 
+### 1.3 高风险操作必须人工确认
 
-### 2.2 安全规则（强制）
+以下操作执行前，必须先请求人工确认。
 
-执行以下高风险操作前，必须先请求人工确认（Human confirmation required）：
+#### 文件与目录变更
 
-文件与目录变更：
-- `rm` / `cp` / `mv` / `chmod` / `chown` / `chgrp`
-- `ln -s` / `unlink`
+- `rm`
+- `cp`
+- `mv`
+- `chmod`
+- `chown`
+- `chgrp`
+- `ln -s`
+- `unlink`
 - `find ... -delete`
-- `sed -i` / `perl -i`
+- `sed -i`
+- `perl -i`
 
-脚本与命令批量执行：
-- 任意脚本直接执行：`bash xxx.sh` / `sh xxx.sh` / `zsh xxx.sh`
-- 解释器执行脚本：`python xxx.py` / `node xxx.js`
-- 远程脚本直连执行：`curl ... | sh` / `wget ... | bash`
+#### 脚本与批量执行
+
+- `bash xxx.sh`
+- `sh xxx.sh`
+- `zsh xxx.sh`
+- `python xxx.py`
+- `node xxx.js`
+- `curl ... | sh`
+- `wget ... | bash`
 - `uv run`
 
-Kubernetes 集群变更（kubectl）：
+#### Kubernetes 集群变更
+
 - `kubectl apply|create|replace|delete|edit|patch`
 - `kubectl scale|rollout|set`
 - `kubectl label|annotate`
 - `kubectl cordon|uncordon|drain|taint`
 
-容器运行时变更（crictl）：
-- `crictl rm` / `crictl rmi`
-- `crictl stop` / `crictl start` / `crictl restart`
-- `crictl exec` / `crictl run` / `crictl create`
+#### 容器运行时变更
 
-对象存储变更（MinIO Client）：
-- `mc rm` / `mc rb` / `mc mv`
+- `crictl rm`
+- `crictl rmi`
+- `crictl stop`
+- `crictl start`
+- `crictl restart`
+- `crictl exec`
+- `crictl run`
+- `crictl create`
 
-操作系统与服务变更：
-- `systemctl restart` / `systemctl stop` / `systemctl start` / `systemctl daemon-reload`
-- `launchctl bootout` / `launchctl unload` / `launchctl disable`
-- `reboot` / `shutdown` / `halt` / `poweroff`
-- `kill` / `killall` / `pkill`
-- 软件安装与系统级变更：`brew install` / `brew upgrade` / `brew uninstall`
+#### 对象存储变更
 
-豁免项（无需人工确认）：
-- `git` 相关操作（如 `git add` / `git commit` / `git pull` / `git push`）
-- 执行 `~/agent` 目录下的本地脚本（包括 `bash/sh/zsh ~/agent/...`、`python ~/agent/...`、`node ~/agent/...`、`uv run ~/agent/...`）
+- `mc rm`
+- `mc rb`
+- `mc mv`
 
-## Part 3: Kubernetes 运维专家基线（默认执行）
+#### 操作系统与服务变更
 
-凡涉及 K8s / kubectl / 集群巡检 / 故障排查 / 生产发布 / 节点运维，默认遵循本章节.
+- `systemctl restart`
+- `systemctl stop`
+- `systemctl start`
+- `systemctl daemon-reload`
+- `launchctl bootout`
+- `launchctl unload`
+- `launchctl disable`
+- `reboot`
+- `shutdown`
+- `halt`
+- `poweroff`
+- `kill`
+- `killall`
+- `pkill`
+- `brew install`
+- `brew upgrade`
+- `brew uninstall`
 
-### 3.1 全局执行约束（最高优先级）
+#### 免确认项
 
-1. 所有 `kubectl` 命令必须显式带 `--context <别名>`（包括 `get/describe/logs/top` 查询命令）.
-2. 严禁使用 `kubectl config use-context` / `kubectl config set-context` 修改全局上下文.
-3. 需要命名空间时必须显式带 `-n <namespace>`
-4. 变更类命令（apply/delete/scale/rollout/patch/edit）执行前，必须先输出命令与影响范围并等待确认.
-5. 严禁直接 SSH 到集群节点，必须优先 `kubectl node-shell --context <别名> <节点IP> [-- <command>]`.
-6. 仅当目标节点 `NotReady/Cordon`，才可通过 kubeasz 跳板 SSH 中转.
+- `git` 相关操作，如 `git add`、`git commit`、`git pull`、`git push`
+- 执行 `~/agent` 目录下本地脚本，包括：
+  - `bash/sh/zsh ~/agent/...`
+  - `python ~/agent/...`
+  - `node ~/agent/...`
+  - `uv run ~/agent/...`
 
-统一命令模板：
-`kubectl --context <别名> -n <namespace> <subcommand>`
+### 1.4 K8s 执行硬约束
 
-node-shell命令例外：
-`kubectl node-shell --context <别名> <节点IP> [-- <command>]`
+- 所有 `kubectl` 命令必须显式带 `--context <别名>`。
+- 需要命名空间时，必须显式带 `-n <namespace>`。
+- 严禁使用 `kubectl config use-context` 或 `kubectl config set-context` 修改全局上下文。
+- 变更类 `kubectl` 命令执行前，必须先输出命令和影响范围并等待确认。
+- 严禁直接 SSH 到集群节点。
+- 节点登录必须优先使用：
+  `kubectl node-shell --context <别名> <节点IP> [-- <command>]`
+- 仅当目标节点 `NotReady` 或已 `Cordon`，才允许通过 kubeasz 跳板 SSH 中转。
 
+### 1.5 节点外网访问硬约束
 
-### 3.2 集群资产（kubectl context 别名）
+- 从 K8s 节点访问外网时，默认必须显式设置 `http_proxy` / `https_proxy`。
+- 未确认代理前，不得假设节点可直连外网。
+- 适用场景包括：
+  - `curl`
+  - `wget`
+  - `docker pull`
+  - 包管理器
+  - 脚本下载
+  - API 调用
+
+推荐写法：
+
+```bash
+export http_proxy=http://<user>:<pass>@<代理IP>:<端口>
+export https_proxy=$http_proxy
+```
+
+### 1.6 文件传输硬约束
+
+本地与节点文件传输统一使用 `~/agent/scripts/upload.py`。
+
+- 上传到节点：
+  `upload.py -c <context> <local> <node_ip>:<remote_path>`
+- 文件大于 `100M` 时，脚本自动走对应集群的 MinIO `tmp` 桶。
+- 仅上传到 MinIO：
+  `~/agent/scripts/upload.py --minio-only -c <context> <local_file>`
+- `~/agent/scripts/upload-minio-tmp.py` 为兼容入口，内部转发到 `upload.py --minio-only`。
+
+## 2. 速查区
+
+### 2.1 本机环境
+
+- OS: `macOS 26.3.1`，`arm64`
+- Python: `3.12` (`pyenv`)
+- Node.js: `25.8.0`
+- npm: `11`
+- 常用工具：`brew`、`docker`、`kubectl`、`mmdc`、`plantuml + graphviz`、`pandoc`
+
+### 2.2 集群 Context
 
 | 别名 | 城市 | 环境 |
 |------|------|------|
 | `ks` | 昆山 | 生产 |
 | `dz` | 达州 | 生产 |
 | `qd` | 青岛 | 生产 |
-| `tj` | 天津 | 测试 |
 | `wh` | 武汉 | 生产 |
 | `sz` | 深圳 | 生产 |
-| `bj` | 北京 | 测试 |
-| `sh` | 上海 | 测试 |
 | `zz` | 郑州 | 生产 |
 | `ny` | 纽约 | 生产 |
-| `ly` | 洛阳 | 测试 |
 | `wq` | 魏桥 | 生产 |
+| `bj` | 北京 | 测试 |
+| `sh` | 上海 | 测试 |
+| `ly` | 洛阳 | 测试 |
 
-生产集群：`ks`、`qd`、`dz`、`zz`、`ny`、`wh`、`sz`、`wq`
-测试集群：`tj`、`bj`、`sh`、`ly`
+- 生产集群：`ks`、`qd`、`dz`、`zz`、`ny`、`wh`、`sz`、`wq`
+- 测试集群：`bj`、`sh`、`ly`
 
-节点外网代理基线（强制）：
+### 2.3 节点外网代理
 
 | 别名 | 城市 | 节点外网代理 |
 |------|------|--------------|
@@ -136,269 +192,445 @@ node-shell命令例外：
 | `dz` | 达州 | `http://jsyadmin:4e2974de@10.1.100.10:3120` |
 | `wh` | 武汉 | 无需代理（节点可直连外网） |
 
-节点访问外网时的推荐写法：
-```bash
-export http_proxy=http://<user>:<pass>@<代理IP>:<端口>
-export https_proxy=$http_proxy
-```
+备注：
 
-### 3.3 架构底座
+- 除 `wh` 外，其余集群节点访问外网前，必须先确认并显式设置代理。
+- 若代理值未带协议头，实际使用时补全为 `http://<host>:<port>`。
 
-- 集群由 **kubeasz** 部署（Ansible 脚本）.
-- `containerd` / `kubelet` / `kube-proxy` / `calico` 为二进制安装，通过 `systemctl` + `journalctl` 维护，不在 Pod 内运行.
+### 2.4 平台基线
 
-K8s 基础信息（当前基线）：
-- K8s: `v1.26.8`
+- 集群由 **kubeasz** 部署。
+- `containerd` / `kubelet` / `kube-proxy` / `calico` 为二进制安装，不在 Pod 内运行。
+- 节点组件排障默认使用 `systemctl` + `journalctl`。
+
+版本基线：
+
+- Kubernetes: `v1.26.8`
 - OS: `CentOS Linux 7.6` / `Ubuntu 22.04 LTS`
-- 节点组件：
-  - kubelet `v1.26.8`
-  - kube-proxy `v1.26.8`
-  - containerd `2.1.4-ske-2.0`
-- kube-system 核心镜像：
-  - calico/node `v3.26.4`
-  - calico/kube-controllers `v3.26.4`
-  - coredns `1.11.1`
-  - metrics-server `v0.7.1`
-  - kube-scheduler `v1.26.8`
-- 常用测试镜像:
-  - image.ac.com:5000/k8s/library/busybox:1.31.1 最常用默认镜像, cronjob,job首选
-  - image.ac.com:5000/k8s/netshoot 需要网络工具验证
+- kubelet: `v1.26.8`
+- kube-proxy: `v1.26.8`
+- containerd: `2.1.4-ske-2.0`
 
-第三方组件（当前基线）：
-- Prometheus: `image.ac.com:5000/k8s/prometheus/prometheus:v2.51.2`
-- Thanos: `v0.35.0`
-- Alertmanager: `v0.27.0`
-- Grafana: `image.ac.com:5000/k8s/grafana/grafana:10.4.1`
-- Loki: `image.ac.com:5000/k8s/grafana/loki:2.6.1`
-- Ingress NGINX: `image.ac.com:5000/k8s/bitnami/nginx-ingress-controller:1.11.3-debian-12-r6`
-- Volcano: `vc-webhook-manager:v1.10.0`、`vc-controller-manager:v1.10.4`、`vc-scheduler:v1.10.0`
+`kube-system` 核心镜像：
 
-kubeasz 详细配置、组件更新与节点维护规则见：`~/agent/kubeasz/SKILL.md`
+- `calico/node:v3.26.4`
+- `calico/kube-controllers:v3.26.4`
+- `coredns:1.11.1`
+- `metrics-server:v0.7.1`
+- `kube-scheduler:v1.26.8`
 
-### 3.4 业务命名空间映射
+常用测试镜像：
+
+- `image.ac.com:5000/k8s/ske-model-tool:v2`
+- `image.ac.com:5000/k8s/netshoot`
+
+### 2.5 命名空间映射
 
 | 业务/组件 | 命名空间 |
 |-----------|----------|
-| 监控 | `monitoring` |
-| 日志 | `loki-system` |
-| 调度/AI | `volcano-system` |
-| 网络/网关 | `ske` |
+| 调度 | `volcano-system` |
+| 网络 / 网关 / CRD | `ske` |
 | 管理平台 | `kubesphere-system` |
 | AI 模型 | `ske-model` |
 | 用户业务 | 以上命名空间以外 |
 
-### 3.5 节点分组与资源组
+### 2.6 节点角色与资源组
 
 特殊角色标签：
-- `kubeasz=true`：kubeasz 管理节点（安装维护、跳板）
+
+- `kubeasz=true`：kubeasz 管理节点
 - `ex-lb=true`：外部负载均衡节点
+- `minio=true`: minio server节点
 - `app=ske`：平台组件节点
 
 常用查询：
+
 ```bash
-kubectl --context <别名> get node -l kubeasz=true -o wide
-kubectl --context <别名> get node -l ex-lb=true -o wide
-kubectl --context <别名> get node -l app=ske -o wide
-kubectl --context <别名> -n kube-system get resourcegroup
-kubectl --context <别名> get node -l resourceGroup=<resourcegroup>
+kubectl --context <ctx> get node -l kubeasz=true -o wide
+kubectl --context <ctx> get node -l ex-lb=true -o wide
+kubectl --context <ctx> get node -l app=ske -o wide
+kubectl --context <ctx> -n kube-system get resourcegroup
+kubectl --context <ctx> get node -l resourceGroup=<resourcegroup>
 ```
 
-ResourceGroup 详细规则见：`~/agent/resourcegroup/SKILL.md`
+补充：
 
-Hostname -> IP：
+- ResourceGroup 规则见 `~/agent/resourcegroup/SKILL.md`
+- Hostname 反查 IP：
+
 ```bash
-kubectl node-shell --context <别名> <任意节点IP> -- grep <hostname> /etc/hosts
+kubectl node-shell --context <ctx> <任意节点IP> -- grep <hostname> /etc/hosts
 ```
 
-### 3.6 诊断工具与排障模板
+- 外部访问链路基线：
+  `nginx (ex-lb) -> ingress -> pod/svc`
 
-高频排障命令：
+### 2.7 镜像管理速查
+
+- 线上镜像必须使用内网 Harbor：
+  `image.ac.com:5000/k8s/<镜像名>:<tag>`
+- 禁止使用 `docker.io` / `ghcr.io` / `quay.io` 作为线上镜像地址。
+- 镜像下载与上传统一通过 `ske-model` 命名空间下的 `docker-tmp` DaemonSet 执行。
+- 推荐以 `zz` 集群作为镜像构建和源站推送枢纽。
+- 源站 Harbor：
+  `image.sourcefind.cn:5000/k8s/<镜像名>:<tag>`
+
+## 3. 标准操作模板区
+
+### 3.1 kubectl 查询模板
+
 ```bash
-kubectl --context <别名> -n <namespace> get po -o wide
-kubectl --context <别名> -n <namespace> describe po <pod>
-kubectl --context <别名> -n <namespace> get events --sort-by=.lastTimestamp | tail -n 30
-kubectl --context <别名> top node
-kubectl --context <别名> -n <namespace> top po
-kubectl --context <别名> -n <namespace> get svc,ep
-kubectl --context <别名> -n <namespace> get ingress
+kubectl --context <ctx> get <resource>
+kubectl --context <ctx> -n <ns> get <resource>
+kubectl --context <ctx> -n <ns> describe <resource> <name>
+kubectl --context <ctx> -n <ns> get pod -o wide
+kubectl --context <ctx> -n <ns> get svc
+kubectl --context <ctx> -n <ns> get events --sort-by=.lastTimestamp | tail -n 30
 ```
 
+### 3.2 巡检模板
 
-
-日志与指标：
 ```bash
-kubectl --context <别名> -n <namespace> logs <pod> [--previous] [-f] [--tail=100]
-uv run ~/k8s/loki.py -h
-uv run ~/k8s/thanos.py -h
+kubectl --context <ctx> get node -o wide
+kubectl --context <ctx> get pod -A -o wide
+kubectl --context <ctx> get pod -A | grep -E 'CrashLoopBackOff|Error|ImagePullBackOff|Evicted'
+kubectl --context <ctx> get svc -A
+kubectl --context <ctx> get ingress -A
+kubectl --context <ctx> top node
+kubectl --context <ctx> top pod -A
 ```
 
-外部访问链路：`nginx (ex-lb) -> ingress -> pod/svc`
+### 3.3 日志排查模板
 
-### 3.7 镜像管理约束
-
-- 集群节点无法访问外网；镜像必须使用内网 Harbor：`image.ac.com:5000/k8s/<镜像名>:<tag>`.
-- 禁止使用 `docker.io` / `ghcr.io` / `quay.io` 作为线上 YAML/Helm/kubectl 镜像地址.
-- 各集群镜像下载与上传不再通过 `kubeasz` 节点中转，统一通过 `ske-model` 命名空间下的 `docker-tmp` DaemonSet 执行.
-
-镜像下载/上传推荐流程：
 ```bash
-kubectl --context <别名> -n ske-model get pod -o wide | grep docker-tmp
-kubectl --context <别名> -n ske-model exec <docker-tmp-pod> -- sh -c '
-docker pull <外网镜像>:<tag> &&
-docker tag <外网镜像>:<tag> image.ac.com:5000/k8s/<镜像名>:<tag> &&
-docker push image.ac.com:5000/k8s/<镜像名>:<tag>
+kubectl --context <ctx> -n <ns> logs <pod>
+kubectl --context <ctx> -n <ns> logs <pod> --tail=200
+kubectl --context <ctx> -n <ns> logs <pod> -f
+kubectl --context <ctx> -n <ns> logs <pod> -c <container> --tail=200
+kubectl --context <ctx> -n <ns> logs <pod> --previous
+kubectl --context <ctx> -n <ns> describe pod <pod>
+```
+
+### 3.4 工作负载定位模板
+
+```bash
+kubectl --context <ctx> -n <ns> get deploy
+kubectl --context <ctx> -n <ns> get sts
+kubectl --context <ctx> -n <ns> get pod -o wide
+kubectl --context <ctx> -n <ns> get pod -l <label_key>=<label_value> -o wide
+kubectl --context <ctx> -n <ns> get svc <svc> -o yaml
+kubectl --context <ctx> -n <ns> get endpoints <svc>
+kubectl --context <ctx> -n <ns> describe svc <svc>
+```
+
+### 3.5 node-shell 模板
+
+```bash
+kubectl node-shell --context <ctx> <node_ip>
+kubectl node-shell --context <ctx> <node_ip> -- hostname
+kubectl node-shell --context <ctx> <node_ip> -- ip addr
+kubectl node-shell --context <ctx> <node_ip> -- crictl ps -a
+kubectl node-shell --context <ctx> <node_ip> -- systemctl status kubelet
+kubectl node-shell --context <ctx> <node_ip> -- journalctl -u kubelet -n 200 --no-pager
+kubectl node-shell --context <ctx> <node_ip> -- journalctl -u containerd -n 200 --no-pager
+```
+
+### 3.6 节点代理模板
+
+```bash
+kubectl node-shell --context <ctx> <node_ip> -- sh -c '
+export http_proxy=http://<user>:<pass>@<proxy_ip>:<port>
+export https_proxy=$http_proxy
+curl -I https://example.com
 '
 ```
 
-补充说明：
-- 优先选择与目标网络/机房一致的 `docker-tmp` Pod 执行镜像拉取与推送.
-- 使用单条非交互 `kubectl exec -- sh -c '...'` 触发任务，避免因长时间挂着 shell 会话而中断.
-- 需要排查镜像同步问题时，优先查询 `docker-tmp` Pod 状态、所在节点和容器日志.
+### 3.7 文件上传模板
 
-### 3.8 tools-pod：文件传输与模型下载工具集
-
-**部署状态：** ks、qd、dz、zz 四个生产集群已部署
-- 镜像：`image.ac.com:5000/k8s/tools-pod:v1`
-- Namespace：`ske-model`
-- 资源：4c 8g，非 control-plane 节点
-
-**功能：**
-- `rsync`：文件夹复制与同步
-- `modelscope`：模型 Hub 下载工具
-
-**挂载配置：**
-- **ks、qd、dz**：`/work`、`/public`（hostPath）
-- **zz**：`/work2`、`/public`（hostPath），nodeSelector: `groupId=127`
-
-**使用方式：**
 ```bash
-# 查询 Pod
-kubectl --context <别名> -n ske-model get pod -l app=tools-pod -o wide
-
-# rsync 示例
-kubectl --context <别名> -n ske-model exec <pod-name> -- rsync -avz /source /dest
-
-# modelscope 下载示例
-kubectl --context <别名> -n ske-model exec <pod-name> -- python -c "
-from modelscope import snapshot_download
-model_dir = snapshot_download('damo/nlp_seqtag_ner_chinese_medical_bert_base')
-"
-
-# 或在 Pod 内交互
-kubectl --context <别名> -n ske-model exec -it <pod-name> -- bash
+~/agent/scripts/upload.py -c <ctx> <local_file> <node_ip>:<remote_path>
+~/agent/scripts/upload.py --minio-only -c <ctx> <local_file>
 ```
 
-**环境变量：** 已配置 `http_proxy`、`https_proxy` 等代理环境变量（via ConfigMap），节点外网访问自动走代理。
+### 3.8 镜像构建模板
 
-### 3.9 拆分子专题 Skills（按需加载）
-
-以下章节拆分为独立 Skill，执行相关任务时必须加载：
-- MinIO: `~/agent/minio/SKILL.md`
-- Grafana: `~/agent/grafana/SKILL.md`
-- Thanos: `~/agent/thanos/SKILL.md`
-- Calico: `~/agent/calico/SKILL.md`
-- ResourceGroup: `~/agent/resourcegroup/SKILL.md`
-- Ex-LB: `~/agent/ex-lb/SKILL.md`
-- kubeasz: `~/agent/kubeasz/SKILL.md`
-
-ClusterPolicy 用户限制专题（直接内建，无需额外 Skill 文件）：
-- 当用户表达“给哪个用户限制使用挂载路径和资源组”“给某个用户增加/修改挂载白名单和资源组限制”“更新某集群某用户的 cluster policy”这类意图时，默认识别为 **Kyverno ClusterPolicy 变更任务**。
-- 默认目标是对应集群内与该用户/命名空间相关的 `ClusterPolicy`，重点处理两类策略：
-  - `hostPath` 挂载路径白名单限制
-  - `Pod` / 工作负载 `nodeSelector.resourceGroup` 注入或限制
-- 执行该类任务时，必须遵循以下流程：
-  1. 先用显式 `--context <别名>` 查询目标集群现有 `ClusterPolicy`、相关 namespace、现有白名单路径和 `resourceGroup` 配置。
-  2. 明确本次变更内容：目标集群、目标 namespace/用户、允许的挂载路径列表、目标 `resourceGroup`、是新增还是修改。
-  3. 先输出准备执行的 `kubectl` 变更命令、受影响的 `ClusterPolicy` 名称、规则名和影响范围，并等待人工确认。
-  4. 变更前先导出原始 YAML 作为回滚依据，例如：
-     ```bash
-     kubectl --context <别名> get clusterpolicy <name> -o yaml
-     ```
-  5. 变更后必须再次查询并校验最终 YAML，确认：
-     - 白名单路径准确写入
-     - `resourceGroup` 注入规则准确写入
-     - 未误伤其他 namespace/用户
-     - `status.conditions` 为 `Ready=True`
-- 若用户没有明确给出 `namespace`，默认先根据用户名、现有策略命名、相关工作负载和历史规则推断；若仍无法可靠判断，再向用户追问。
-- 若集群内不存在对应策略，则默认方案是：
-  - 在现有命名风格基础上新增或扩展 `restrict-hostpath` 规则
-  - 在现有命名风格基础上新增或扩展 `mutate-pod-nodeselector` 规则
-  - 保持规则命名与现网风格一致，避免引入不必要的新策略对象
-- 对 `ClusterPolicy` 的任何 `apply`、`patch`、`replace` 都属于高风险变更，必须严格遵守本文件的人工确认规则，不得直接执行。
-
-### 3.9 标准变更执行流程（强制）
-
-1. 保留当前配置确保可以回滚（导出 YAML/记录关键参数与版本）.
-2. 明确可能的风险和具体执行步骤，并得到主人确认.
-3. 实施变更并监控状态，若有异常立即通知主人，由主人决定回滚或调整方案.
-4. 对实施方案进行测试验证，确保最终效果符合预期.
-
-回滚保护规则（强制）：
-- 严禁对包含 `Namespace` 资源的整包 YAML 直接执行 `kubectl delete -f <file>` 作为回滚手段。
-- 严禁把 `Namespace`、`CRD`、`PV` 等高影响资源与普通工作负载写在同一个“可直接 delete 回滚”的 YAML 中。
-- 回滚前必须先检查文件内容：
 ```bash
-kubectl --context <别名> -n <namespace> diff -f <file>
-grep -n "^kind: Namespace$\\|^kind: CustomResourceDefinition$\\|^kind: PersistentVolume$" <file>
-```
-- 需要回滚时，优先按资源类型或资源名精确删除，例如仅删除 `Deployment`、`Service`、`Ingress`，不要删除命名空间容器对象本身。
-- 若发布 YAML 必须包含 `Namespace`，则应拆分为“基础资源文件”和“业务工作负载文件”；回滚只允许针对工作负载文件执行，不得对基础资源文件执行 `delete -f`。
-
-## Part 4: 技能仓库同步快捷指令
-
-当用户说”更新技能”时，默认执行：
-1. 清空 Agent memory 目录（删除 `~/.claude/projects/*/memory/` 下所有文件并重建空 `MEMORY.md`）
-2. 在 `~/agent` 执行：
-   - `git add -A && git diff --cached --quiet || git commit -m “chore: update skills”`（先提交本地改动，无改动则跳过）
-   - `git pull --rebase`
-   - `git push`
-
-## Part 5: 本地快捷脚本
-
-### 5.1 Codex 额度查询
-
-- 脚本：`~/agent/scripts/codex_quota.py`
-- 用途：通过供应商接口直接查询 Codex 卡密当日已用额度、剩余额度和剩余百分比。
-- 默认行为：默认绕过本机 `http_proxy` / `https_proxy` / `all_proxy`，避免 Clash 代理导致目标域名握手异常。
-- 每日额度默认按 `90` 计算；若供应商后续调整额度，可通过 `--daily-quota <值>` 覆盖。
-
-示例：
-```bash
-python ~/agent/scripts/codex_quota.py --card <激活码>
-python ~/agent/scripts/codex_quota.py --card <激活码> --json
-CODEX_CARD=<激活码> python ~/agent/scripts/codex_quota.py
+kubectl --context zz -n ske-model get pod -l app=docker-tmp -o wide
+kubectl --context zz -n ske-model cp /local/path/Dockerfile docker-tmp-<pod-suffix>:/tmp/build/
+kubectl --context zz -n ske-model cp /local/path/source docker-tmp-<pod-suffix>:/tmp/build/
+kubectl --context zz -n ske-model exec docker-tmp-<pod-suffix> -- sh -c '
+cd /tmp/build
+docker build -t image.sourcefind.cn:5000/k8s/<image>:<tag> .
+docker push image.sourcefind.cn:5000/k8s/<image>:<tag>
+'
 ```
 
-### 5.2 Agent 会话临时文件清理
+### 3.9 镜像同步模板
 
-- 脚本：`~/agent/scripts/agent_state_cleanup.py`
-- 用途：保守清理 `~/.codex`、`~/.claude`、`~/.opencode` / `~/.config/opencode` 下的旧会话产物、缓存、临时目录，不触碰认证、配置、主状态库等关键文件。
-- 默认行为：`dry-run`，只展示将清理的对象和可回收空间；仅在显式加 `--apply` 时执行删除。
-- 当前策略：
-  - Codex：旧 `sessions`、`shell_snapshots`、`.tmp/tmp`、`ambient-suggestions`
-  - Claude：旧 `projects` 会话 `jsonl`、`tool-results`、`subagents`、`session-env`、`file-history`、`paste-cache`、`telemetry`
-  - Opencode：仅清理已知 `tmp/cache/logs/sessions` 类目录；不碰 `node_modules`、包清单和配置
-- 建议周期：
-  - 每周执行一次 `dry-run`
-  - 每 2~4 周执行一次 `--apply`
-  - 大版本升级前后额外执行一次 `dry-run` 观察目录变化
-
-示例：
 ```bash
-python ~/agent/scripts/agent_state_cleanup.py
-python ~/agent/scripts/agent_state_cleanup.py --verbose
-python ~/agent/scripts/agent_state_cleanup.py --products codex claude --apply
+kubectl --context <target_ctx> -n ske-model exec <docker-tmp-pod> -- sh -c '
+docker pull image.sourcefind.cn:5000/k8s/<image>:<tag> &&
+docker tag image.sourcefind.cn:5000/k8s/<image>:<tag> image.ac.com:5000/k8s/<image>:<tag> &&
+docker push image.ac.com:5000/k8s/<image>:<tag>
+'
 ```
 
-### 5.3 节点外网代理账号管理
+批量同步骨架：
 
-当前有效代理账号（从 K8s notebook pod 环境变量提取）：
-
-| 账号 | 密码 | IP:Port | 对应集群 | 提取时间 |
-|------|------|---------|---------|---------|
-| haowj | 6c72c7e5 | 10.15.100.43:3120 | ks (昆山) | 2026-05-07 |
-
-获取方式：在目标集群 jsyadmin namespace 的 notebook pod 中查看环境变量：
 ```bash
-kubectl --context <别名> -n jsyadmin describe pod <notebook-pod> | grep -A 5 "http_proxy"
+for ctx in ks qd dz ny wh sz wq; do
+  kubectl --context "$ctx" -n ske-model exec <docker-tmp-pod> -- sh -c '
+  docker pull image.sourcefind.cn:5000/k8s/<image>:<tag> &&
+  docker tag image.sourcefind.cn:5000/k8s/<image>:<tag> image.ac.com:5000/k8s/<image>:<tag> &&
+  docker push image.ac.com:5000/k8s/<image>:<tag>
+  '
+done
+```
+
+### 3.10 变更前确认模板
+
+执行以下命令前，先向人工明确输出：
+
+- 完整命令
+- 目标 context
+- 目标 namespace
+- 目标资源
+- 影响范围
+- 回滚思路
+
+标准话术骨架：
+
+```text
+准备执行变更命令：
+<完整命令>
+
+影响范围：
+- context: <ctx>
+- namespace: <ns>
+- resource: <kind/name>
+- expected impact: <impact>
+- rollback: <rollback plan>
+```
+
+### 3.11 额度查询模板
+
+用户说“查额度”“看 Codex 额度”“今天还剩多少额度”时，默认执行：
+
+```bash
+python ~/agent/scripts/codex_quota.py
+```
+
+### 3.12 更新技能模板
+
+用户说“更新技能”“同步 skills”“刷新 agent 技能”时，默认执行：
+
+```bash
+python ~/agent/scripts/skill_update.py
+```
+
+### 3.13 上传文件模板
+
+用户说“上传文件到某集群某节点某路径”时，先从用户语句中解析：
+
+- 集群：`<ctx>`
+- 源文件：`<local_file>`
+- 目标节点：`<node_ip>`
+- 目标路径：`<remote_path>`
+
+默认执行：
+
+```bash
+python ~/agent/scripts/upload.py -c <ctx> <local_file> <node_ip>:<remote_path>
+```
+
+仅上传到 MinIO `tmp` 桶时，执行：
+
+```bash
+python ~/agent/scripts/upload.py --minio-only -c <ctx> <local_file>
+```
+
+解析示例：
+
+- “把 `/tmp/a.tar.gz` 上传到 `qd` 的 `10.1.4.11:/tmp/`”
+- 解析为：
+  - `ctx=qd`
+  - `local_file=/tmp/a.tar.gz`
+  - `node_ip=10.1.4.11`
+  - `remote_path=/tmp/`
+
+### 3.14 跨节点拷贝文件模板
+
+用户说“从某集群某节点拷文件到另一节点”时，先解析：
+
+- 集群：`<ctx>`
+- 源节点：`<src_node_ip>`
+- 源路径：`<src_path>`
+- 目标节点：`<dst_node_ip>`
+- 目标路径：`<dst_path>`
+
+默认使用 `ske-model-tool` 作为中转执行 `rsync`。
+
+标准思路：
+
+1. 在 `ske-model` 命名空间启动或选择一个 `ske-model-tool` Pod。
+2. 将源节点目录通过 `rsync` 拉到中转 Pod 临时目录。
+3. 再从中转 Pod 推到目标节点。
+
+示例骨架：
+
+```bash
+kubectl --context <ctx> -n ske-model get pod -o wide | grep ske-model-tool
+kubectl --context <ctx> -n ske-model exec <ske-model-tool-pod> -- sh -c '
+mkdir -p /tmp/rsync-work &&
+rsync -av --progress root@<src_node_ip>:<src_path> /tmp/rsync-work/ &&
+rsync -av --progress /tmp/rsync-work/ root@<dst_node_ip>:<dst_path>
+'
+```
+
+补充规则：
+
+- 若用户给的是单文件，`src_path` 与 `dst_path` 直接按文件路径处理。
+- 若用户给的是目录，默认保留目录结构，优先使用 `rsync -av --progress`。
+- 若目标集群或目标路径不明确，先补全参数后再执行。
+
+### 3.15 下载模型模板
+
+用户说“下载模型到某集群”时，先解析：
+
+- 集群：`<ctx>`
+- 模型名或模型路径：`<model_name>`
+- 目标目录：`<target_dir>`
+- 额外参数：如 revision、source、量化版本、是否走代理
+
+默认使用 `ske-model-tool` 内的 `modelscope` 执行下载。
+
+示例骨架：
+
+```bash
+kubectl --context <ctx> -n ske-model get pod -o wide | grep ske-model-tool
+kubectl --context <ctx> -n ske-model exec <ske-model-tool-pod> -- sh -c '
+cd <target_dir> &&
+python -m modelscope.cli.download <model_name>
+'
+```
+
+若节点或 Pod 内访问外网，需要先显式设置代理：
+
+```bash
+kubectl --context <ctx> -n ske-model exec <ske-model-tool-pod> -- sh -c '
+export http_proxy=<proxy>
+export https_proxy=$http_proxy
+cd <target_dir> &&
+python -m modelscope.cli.download <model_name>
+'
+```
+
+### 3.16 压测模型模板
+
+用户说“压测某个模型”“跑一下某服务性能”“测 token 长度 / cache rate / 并发”时，先解析：
+
+- 集群：`<ctx>`
+- 服务名：`<service>`
+- token lengths：`<token_lengths>`
+- cache rates：`<cache_rates>`
+- 并发：`<concurrency>`
+- 输出 token 数：`<output_tokens>`
+- 其他参数：如 benchmark mode、model、timeout
+
+默认先进入目标集群 `ske-model` 命名空间内的 `ske-model-tool` Pod，再在 Pod 内执行 `maas-test.py`。
+
+帮助命令：
+
+```bash
+kubectl --context <ctx> -n ske-model get pod -o wide | grep ske-model-tool
+kubectl --context <ctx> -n ske-model exec <ske-model-tool-pod> -- python /usr/local/bin/maas-test.py --help
+```
+
+常用骨架：
+
+```bash
+kubectl --context <ctx> -n ske-model exec <ske-model-tool-pod> -- \
+  python /usr/local/bin/maas-test.py \
+  --service <service> \
+  --token-lengths <token_length_1> <token_length_2> \
+  --cache-rates <cache_rate_1> <cache_rate_2>
+```
+
+带并发与输出 token 的示例：
+
+```bash
+kubectl --context <ctx> -n ske-model exec <ske-model-tool-pod> -- \
+  python /usr/local/bin/maas-test.py \
+  --service <service> \
+  --token-lengths 20000 80000 \
+  --cache-rates 0.0 0.8 \
+  --concurrency 24 \
+  --output-tokens 256
+```
+
+默认结果文件：
+
+```text
+/tmp/maas-benchmark-result.log
+```
+
+### 3.17 MinIO 桶扫描模板
+
+用户说“扫描 MinIO 桶”“出 MinIO 桶策略报告”“看桶权限/生命周期/版本控制”时，默认使用本地扫描脚本：
+
+```bash
+python ~/agent/minio/minio_scan.py
+```
+
+输出说明：
+
+- 脚本会扫描多个 MinIO alias 的桶信息
+- 生成桶访问策略、授权用户、生命周期、版本控制等报告
+- 默认输出文件：
+
+```text
+/Users/humin/opencode/minio_policy_report.md
+```
+
+### 3.18 MinIO 同步进度模板
+
+用户说“看 MinIO 同步进度”“看 LFS 同步跑到哪了”“检查 MinIO 同步状态”时，默认按 CronJob / Job / 日志 三步检查：
+
+```bash
+kubectl --context <ctx> -n ske get cronjob minio-lfs-sync
+kubectl --context <ctx> -n ske get job -l job-name
+kubectl --context <ctx> -n ske logs -l job-name --tail=50
+```
+
+需要手动触发一次时：
+
+```bash
+kubectl --context <ctx> -n ske create job --from=cronjob/minio-lfs-sync minio-lfs-sync-manual-$(date +%s)
+```
+
+需要看桶级对象变化时，可补充：
+
+```bash
+kubectl --context <ctx> -n ske exec deploy/mc-client -- mc stat local/<bucket>
+kubectl --context <ctx> -n ske exec deploy/mc-client -- mc ls local/<bucket>/
+```
+
+### 3.19 扫描模型模板
+
+用户说“扫描模型”“更新可用模型列表”“探测 ks/zz 当前可用模型”时，默认执行：
+
+```bash
+python ~/agent/maas/probe_models.py
+```
+
+若按 `maas` 技能标准流程执行，也可使用：
+
+```bash
+uv run /Users/humin/agent/maas/probe_models.py
+```
+
+输出：
+
+```text
+available_models.md
 ```
