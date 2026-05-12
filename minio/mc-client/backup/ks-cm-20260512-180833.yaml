@@ -1,0 +1,271 @@
+apiVersion: v1
+data:
+  gitlab_lfs_sync.py: |
+    #!/usr/bin/env python3
+    from __future__ import annotations
+
+    import argparse
+    import json
+    import math
+    import os
+    import subprocess
+    import threading
+    import time
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from dataclasses import dataclass
+    from datetime import datetime, timezone
+    from pathlib import Path
+
+
+    DEFAULT_BUCKET = "gitlab-lfs-prod"
+    DEFAULT_CONCURRENCY = 4
+    DEFAULT_TIMEOUT_SECONDS = 4 * 60 * 60
+    DEFAULT_MAX_RETRIES = 5
+    DEFAULT_SKIP_HOURS = 24
+
+
+    @dataclass
+    class PrefixResult:
+        prefix: str
+        status: str
+        attempt: int
+        message: str
+
+
+    class SyncState:
+        def __init__(self, path: Path) -> None:
+            self.path = path
+            self.lock = threading.Lock()
+            self.data = self._load()
+
+        def _load(self) -> dict:
+            if not self.path.exists():
+                return {}
+            try:
+                return json.loads(self.path.read_text())
+            except json.JSONDecodeError:
+                return {}
+
+        def should_skip(self, prefix: str, now_ts: float, skip_seconds: int) -> bool:
+            with self.lock:
+                item = self.data.get(prefix, {})
+                if item.get("last_result") != "success":
+                    return False
+                last_success = item.get("last_success_ts")
+                if not isinstance(last_success, (int, float)):
+                    return False
+                return now_ts - last_success < skip_seconds
+
+        def mark_success(self, prefix: str, attempt: int) -> None:
+            now = time.time()
+            with self.lock:
+                item = self.data.setdefault(prefix, {})
+                item["last_result"] = "success"
+                item["last_success_ts"] = now
+                item["last_success_at"] = iso_now()
+                item["last_attempt"] = attempt
+                self._save()
+
+        def mark_failure(self, prefix: str, attempt: int, message: str) -> None:
+            with self.lock:
+                item = self.data.setdefault(prefix, {})
+                item["last_result"] = "failed"
+                item["last_failure_at"] = iso_now()
+                item["last_attempt"] = attempt
+                item["last_error"] = message
+                self._save()
+
+        def _save(self) -> None:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.path.write_text(json.dumps(self.data, indent=2, sort_keys=True))
+
+
+    def iso_now() -> str:
+        return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+    def append_log(log_path: Path, prefix: str, attempt: int, message: str) -> None:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        line = f"[{iso_now()}] prefix={prefix} attempt={attempt} FAILED {message}\n"
+        with log_path.open("a", encoding="utf-8") as fh:
+            fh.write(line)
+
+
+    def summarize_message(message: str, max_lines: int = 3) -> str:
+        lines = [line.strip() for line in message.splitlines() if line.strip()]
+        if not lines:
+            return "no error output"
+        if len(lines) <= max_lines:
+            return " | ".join(lines)
+        head = " | ".join(lines[:max_lines])
+        return f"{head} | ... ({len(lines) - max_lines} more lines)"
+
+
+    def format_duration(seconds: float) -> str:
+        total = max(0, int(math.ceil(seconds)))
+        hours, rem = divmod(total, 3600)
+        minutes, secs = divmod(rem, 60)
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+
+    def run_mirror(mc_bin: str, bucket: str, prefix: str, timeout_seconds: int) -> tuple[bool, str]:
+        src = f"origin/{bucket}/{prefix}/"
+        dst = f"local/{bucket}/{prefix}/"
+        cmd = [mc_bin, "mirror", "--overwrite", "--preserve", src, dst]
+        try:
+            completed = subprocess.run(
+                cmd,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=timeout_seconds,
+                env=os.environ.copy(),
+            )
+        except subprocess.TimeoutExpired:
+            return False, f"timeout after {timeout_seconds}s"
+
+        output = "\n".join(
+            part.strip() for part in (completed.stdout, completed.stderr) if part.strip()
+        )
+        if completed.returncode == 0:
+            return True, output or "ok"
+        return False, output or f"exit_code={completed.returncode}"
+
+
+    def sync_one_prefix(
+        prefix: str,
+        mc_bin: str,
+        bucket: str,
+        timeout_seconds: int,
+        max_retries: int,
+        state: SyncState,
+        log_path: Path,
+        skip_seconds: int,
+    ) -> PrefixResult:
+        now_ts = time.time()
+        if state.should_skip(prefix, now_ts, skip_seconds):
+            return PrefixResult(prefix=prefix, status="skipped", attempt=0, message="recent success < 24h")
+
+        last_message = ""
+        for attempt in range(1, max_retries + 1):
+            ok, message = run_mirror(mc_bin, bucket, prefix, timeout_seconds)
+            if ok:
+                state.mark_success(prefix, attempt)
+                return PrefixResult(prefix=prefix, status="success", attempt=attempt, message=message)
+
+            last_message = message
+            state.mark_failure(prefix, attempt, message)
+            append_log(log_path, prefix, attempt, message)
+
+        return PrefixResult(prefix=prefix, status="failed", attempt=max_retries, message=last_message)
+
+
+    def build_prefixes() -> list[str]:
+        return [f"{i:02x}" for i in range(256)]
+
+
+    def parse_args() -> argparse.Namespace:
+        parser = argparse.ArgumentParser(description="Mirror origin gitlab-lfs-prod prefixes to local with retry/skip state.")
+        parser.add_argument("--mc-bin", default="/usr/local/bin/mc")
+        parser.add_argument("--bucket", default=DEFAULT_BUCKET)
+        parser.add_argument("--concurrency", type=int, default=DEFAULT_CONCURRENCY)
+        parser.add_argument("--timeout-seconds", type=int, default=DEFAULT_TIMEOUT_SECONDS)
+        parser.add_argument("--max-retries", type=int, default=DEFAULT_MAX_RETRIES)
+        parser.add_argument("--skip-hours", type=int, default=DEFAULT_SKIP_HOURS)
+        parser.add_argument("--state-file", default="/tmp/gitlab-sync-state.json")
+        parser.add_argument("--log-file", default="/tmp/gitlab-sync.log")
+        parser.add_argument("--prefixes", nargs="*", help="Optional explicit prefixes, e.g. 00 01 ff")
+        parser.add_argument("--verbose-skips", action="store_true")
+        return parser.parse_args()
+
+
+    def main() -> int:
+        args = parse_args()
+        state = SyncState(Path(args.state_file))
+        log_path = Path(args.log_file)
+        skip_seconds = args.skip_hours * 60 * 60
+        prefixes = args.prefixes or build_prefixes()
+        started_at = time.time()
+
+        print(
+            f"[{iso_now()}] start bucket={args.bucket} prefixes={len(prefixes)} "
+            f"concurrency={args.concurrency} timeout={args.timeout_seconds}s retries={args.max_retries} "
+            f"skip_hours={args.skip_hours} state_file={args.state_file} log_file={args.log_file} cwd={os.getcwd()}"
+        )
+
+        results: list[PrefixResult] = []
+        with ThreadPoolExecutor(max_workers=args.concurrency) as executor:
+            futures = {
+                executor.submit(
+                    sync_one_prefix,
+                    prefix,
+                    args.mc_bin,
+                    args.bucket,
+                    args.timeout_seconds,
+                    args.max_retries,
+                    state,
+                    log_path,
+                    skip_seconds,
+                ): prefix
+                for prefix in prefixes
+            }
+        for future in as_completed(futures):
+            result = future.result()
+            results.append(result)
+            if result.status == "skipped":
+                if args.verbose_skips:
+                    print(
+                        f"[{iso_now()}] prefix={result.prefix} status={result.status} "
+                        f"attempt={result.attempt} message={result.message}"
+                    )
+                continue
+
+            message = result.message
+            if result.status == "failed":
+                message = summarize_message(result.message)
+
+            print(
+                f"[{iso_now()}] prefix={result.prefix} status={result.status} "
+                f"attempt={result.attempt} message={message}"
+            )
+
+        success = sum(1 for item in results if item.status == "success")
+        skipped = sum(1 for item in results if item.status == "skipped")
+        failed = sum(1 for item in results if item.status == "failed")
+        duration = format_duration(time.time() - started_at)
+        print(
+            f"[{iso_now()}] done total={len(results)} success={success} skipped={skipped} failed={failed} duration={duration}"
+        )
+        return 1 if failed else 0
+
+
+    if __name__ == "__main__":
+        raise SystemExit(main())
+  runner.sh: |
+    #!/bin/sh
+    set -eu
+
+    LOCK_DIR="/tmp/gitlab-lfs-sync.lock"
+
+    while true; do
+      if mkdir "${LOCK_DIR}" 2>/dev/null; then
+        trap 'rmdir "${LOCK_DIR}"' EXIT INT TERM
+        python3 /scripts/gitlab_lfs_sync.py || true
+        rmdir "${LOCK_DIR}"
+        trap - EXIT INT TERM
+      else
+        echo "[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] sync still running, skip this round"
+      fi
+
+      sleep 900
+    done
+kind: ConfigMap
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"v1","data":{"gitlab_lfs_sync.py":"#!/usr/bin/env python3\nfrom __future__ import annotations\n\nimport argparse\nimport json\nimport math\nimport os\nimport subprocess\nimport threading\nimport time\nfrom concurrent.futures import ThreadPoolExecutor, as_completed\nfrom dataclasses import dataclass\nfrom datetime import datetime, timezone\nfrom pathlib import Path\n\n\nDEFAULT_BUCKET = \"gitlab-lfs-prod\"\nDEFAULT_CONCURRENCY = 4\nDEFAULT_TIMEOUT_SECONDS = 4 * 60 * 60\nDEFAULT_MAX_RETRIES = 5\nDEFAULT_SKIP_HOURS = 24\n\n\n@dataclass\nclass PrefixResult:\n    prefix: str\n    status: str\n    attempt: int\n    message: str\n\n\nclass SyncState:\n    def __init__(self, path: Path) -\u003e None:\n        self.path = path\n        self.lock = threading.Lock()\n        self.data = self._load()\n\n    def _load(self) -\u003e dict:\n        if not self.path.exists():\n            return {}\n        try:\n            return json.loads(self.path.read_text())\n        except json.JSONDecodeError:\n            return {}\n\n    def should_skip(self, prefix: str, now_ts: float, skip_seconds: int) -\u003e bool:\n        with self.lock:\n            item = self.data.get(prefix, {})\n            if item.get(\"last_result\") != \"success\":\n                return False\n            last_success = item.get(\"last_success_ts\")\n            if not isinstance(last_success, (int, float)):\n                return False\n            return now_ts - last_success \u003c skip_seconds\n\n    def mark_success(self, prefix: str, attempt: int) -\u003e None:\n        now = time.time()\n        with self.lock:\n            item = self.data.setdefault(prefix, {})\n            item[\"last_result\"] = \"success\"\n            item[\"last_success_ts\"] = now\n            item[\"last_success_at\"] = iso_now()\n            item[\"last_attempt\"] = attempt\n            self._save()\n\n    def mark_failure(self, prefix: str, attempt: int, message: str) -\u003e None:\n        with self.lock:\n            item = self.data.setdefault(prefix, {})\n            item[\"last_result\"] = \"failed\"\n            item[\"last_failure_at\"] = iso_now()\n            item[\"last_attempt\"] = attempt\n            item[\"last_error\"] = message\n            self._save()\n\n    def _save(self) -\u003e None:\n        self.path.parent.mkdir(parents=True, exist_ok=True)\n        self.path.write_text(json.dumps(self.data, indent=2, sort_keys=True))\n\n\ndef iso_now() -\u003e str:\n    return datetime.now(timezone.utc).strftime(\"%Y-%m-%dT%H:%M:%SZ\")\n\n\ndef append_log(log_path: Path, prefix: str, attempt: int, message: str) -\u003e None:\n    log_path.parent.mkdir(parents=True, exist_ok=True)\n    line = f\"[{iso_now()}] prefix={prefix} attempt={attempt} FAILED {message}\\n\"\n    with log_path.open(\"a\", encoding=\"utf-8\") as fh:\n        fh.write(line)\n\n\ndef summarize_message(message: str, max_lines: int = 3) -\u003e str:\n    lines = [line.strip() for line in message.splitlines() if line.strip()]\n    if not lines:\n        return \"no error output\"\n    if len(lines) \u003c= max_lines:\n        return \" | \".join(lines)\n    head = \" | \".join(lines[:max_lines])\n    return f\"{head} | ... ({len(lines) - max_lines} more lines)\"\n\n\ndef format_duration(seconds: float) -\u003e str:\n    total = max(0, int(math.ceil(seconds)))\n    hours, rem = divmod(total, 3600)\n    minutes, secs = divmod(rem, 60)\n    return f\"{hours:02d}:{minutes:02d}:{secs:02d}\"\n\n\ndef run_mirror(mc_bin: str, bucket: str, prefix: str, timeout_seconds: int) -\u003e tuple[bool, str]:\n    src = f\"origin/{bucket}/{prefix}/\"\n    dst = f\"local/{bucket}/{prefix}/\"\n    cmd = [mc_bin, \"mirror\", \"--overwrite\", \"--preserve\", src, dst]\n    try:\n        completed = subprocess.run(\n            cmd,\n            check=False,\n            capture_output=True,\n            text=True,\n            timeout=timeout_seconds,\n            env=os.environ.copy(),\n        )\n    except subprocess.TimeoutExpired:\n        return False, f\"timeout after {timeout_seconds}s\"\n\n    output = \"\\n\".join(\n        part.strip() for part in (completed.stdout, completed.stderr) if part.strip()\n    )\n    if completed.returncode == 0:\n        return True, output or \"ok\"\n    return False, output or f\"exit_code={completed.returncode}\"\n\n\ndef sync_one_prefix(\n    prefix: str,\n    mc_bin: str,\n    bucket: str,\n    timeout_seconds: int,\n    max_retries: int,\n    state: SyncState,\n    log_path: Path,\n    skip_seconds: int,\n) -\u003e PrefixResult:\n    now_ts = time.time()\n    if state.should_skip(prefix, now_ts, skip_seconds):\n        return PrefixResult(prefix=prefix, status=\"skipped\", attempt=0, message=\"recent success \u003c 24h\")\n\n    last_message = \"\"\n    for attempt in range(1, max_retries + 1):\n        ok, message = run_mirror(mc_bin, bucket, prefix, timeout_seconds)\n        if ok:\n            state.mark_success(prefix, attempt)\n            return PrefixResult(prefix=prefix, status=\"success\", attempt=attempt, message=message)\n\n        last_message = message\n        state.mark_failure(prefix, attempt, message)\n        append_log(log_path, prefix, attempt, message)\n\n    return PrefixResult(prefix=prefix, status=\"failed\", attempt=max_retries, message=last_message)\n\n\ndef build_prefixes() -\u003e list[str]:\n    return [f\"{i:02x}\" for i in range(256)]\n\n\ndef parse_args() -\u003e argparse.Namespace:\n    parser = argparse.ArgumentParser(description=\"Mirror origin gitlab-lfs-prod prefixes to local with retry/skip state.\")\n    parser.add_argument(\"--mc-bin\", default=\"/usr/local/bin/mc\")\n    parser.add_argument(\"--bucket\", default=DEFAULT_BUCKET)\n    parser.add_argument(\"--concurrency\", type=int, default=DEFAULT_CONCURRENCY)\n    parser.add_argument(\"--timeout-seconds\", type=int, default=DEFAULT_TIMEOUT_SECONDS)\n    parser.add_argument(\"--max-retries\", type=int, default=DEFAULT_MAX_RETRIES)\n    parser.add_argument(\"--skip-hours\", type=int, default=DEFAULT_SKIP_HOURS)\n    parser.add_argument(\"--state-file\", default=\"/tmp/gitlab-sync-state.json\")\n    parser.add_argument(\"--log-file\", default=\"/tmp/gitlab-sync.log\")\n    parser.add_argument(\"--prefixes\", nargs=\"*\", help=\"Optional explicit prefixes, e.g. 00 01 ff\")\n    parser.add_argument(\"--verbose-skips\", action=\"store_true\")\n    return parser.parse_args()\n\n\ndef main() -\u003e int:\n    args = parse_args()\n    state = SyncState(Path(args.state_file))\n    log_path = Path(args.log_file)\n    skip_seconds = args.skip_hours * 60 * 60\n    prefixes = args.prefixes or build_prefixes()\n    started_at = time.time()\n\n    print(\n        f\"[{iso_now()}] start bucket={args.bucket} prefixes={len(prefixes)} \"\n        f\"concurrency={args.concurrency} timeout={args.timeout_seconds}s retries={args.max_retries} \"\n        f\"skip_hours={args.skip_hours} state_file={args.state_file} log_file={args.log_file} cwd={os.getcwd()}\"\n    )\n\n    results: list[PrefixResult] = []\n    with ThreadPoolExecutor(max_workers=args.concurrency) as executor:\n        futures = {\n            executor.submit(\n                sync_one_prefix,\n                prefix,\n                args.mc_bin,\n                args.bucket,\n                args.timeout_seconds,\n                args.max_retries,\n                state,\n                log_path,\n                skip_seconds,\n            ): prefix\n            for prefix in prefixes\n        }\n    for future in as_completed(futures):\n        result = future.result()\n        results.append(result)\n        if result.status == \"skipped\":\n            if args.verbose_skips:\n                print(\n                    f\"[{iso_now()}] prefix={result.prefix} status={result.status} \"\n                    f\"attempt={result.attempt} message={result.message}\"\n                )\n            continue\n\n        message = result.message\n        if result.status == \"failed\":\n            message = summarize_message(result.message)\n\n        print(\n            f\"[{iso_now()}] prefix={result.prefix} status={result.status} \"\n            f\"attempt={result.attempt} message={message}\"\n        )\n\n    success = sum(1 for item in results if item.status == \"success\")\n    skipped = sum(1 for item in results if item.status == \"skipped\")\n    failed = sum(1 for item in results if item.status == \"failed\")\n    duration = format_duration(time.time() - started_at)\n    print(\n        f\"[{iso_now()}] done total={len(results)} success={success} skipped={skipped} failed={failed} duration={duration}\"\n    )\n    return 1 if failed else 0\n\n\nif __name__ == \"__main__\":\n    raise SystemExit(main())\n","runner.sh":"#!/bin/sh\nset -eu\n\nLOCK_DIR=\"/tmp/gitlab-lfs-sync.lock\"\n\nwhile true; do\n  if mkdir \"${LOCK_DIR}\" 2\u003e/dev/null; then\n    trap 'rmdir \"${LOCK_DIR}\"' EXIT INT TERM\n    python3 /scripts/gitlab_lfs_sync.py || true\n    rmdir \"${LOCK_DIR}\"\n    trap - EXIT INT TERM\n  else\n    echo \"[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] sync still running, skip this round\"\n  fi\n\n  sleep 900\ndone\n"},"kind":"ConfigMap","metadata":{"annotations":{},"name":"minio-lfs-sync-script","namespace":"ske"}}
+  creationTimestamp: "2026-04-17T12:10:27Z"
+  name: minio-lfs-sync-script
+  namespace: ske
+  resourceVersion: "1934912097"
+  uid: b16d1970-5a8a-494e-872e-8622921b08df
