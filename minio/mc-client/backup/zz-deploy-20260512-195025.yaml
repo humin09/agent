@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    deployment.kubernetes.io/revision: "8"
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"apps/v1","kind":"Deployment","metadata":{"annotations":{},"labels":{"app":"mc-client"},"name":"mc-client","namespace":"ske"},"spec":{"replicas":1,"selector":{"matchLabels":{"app":"mc-client"}},"template":{"metadata":{"labels":{"app":"mc-client"}},"spec":{"containers":[{"command":["/bin/sh","/scripts/runner.sh"],"envFrom":[{"configMapRef":{"name":"mc-aliases"}},{"configMapRef":{"name":"http-proxy","optional":true}}],"image":"image.ac.com:5000/k8s/ske-model-tool:v2-mc","imagePullPolicy":"IfNotPresent","name":"mc","resources":{"limits":{"cpu":"2","memory":"2Gi"},"requests":{"cpu":"100m","memory":"2Gi"}},"volumeMounts":[{"mountPath":"/scripts","name":"sync-script"}]}],"hostNetwork":true,"nodeSelector":{"ex-lb":"true"},"restartPolicy":"Always","tolerations":[{"operator":"Exists"}],"volumes":[{"configMap":{"defaultMode":493,"name":"minio-lfs-sync-script"},"name":"sync-script"}]}}}}
+  creationTimestamp: "2026-05-11T10:01:43Z"
+  generation: 8
+  labels:
+    app: mc-client
+  name: mc-client
+  namespace: ske
+  resourceVersion: "354962873"
+  uid: a53365da-4d58-4c86-87a1-ca85e63a6669
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: mc-client
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/restartedAt: "2026-05-12T15:57:09+08:00"
+      creationTimestamp: null
+      labels:
+        app: mc-client
+    spec:
+      containers:
+      - command:
+        - /bin/sh
+        - /scripts/runner.sh
+        envFrom:
+        - configMapRef:
+            name: mc-aliases
+        - configMapRef:
+            name: http-proxy
+            optional: true
+        image: image.ac.com:5000/k8s/ske-model-tool:v2-mc
+        imagePullPolicy: IfNotPresent
+        name: mc
+        resources:
+          limits:
+            cpu: "2"
+            memory: 2Gi
+          requests:
+            cpu: 100m
+            memory: 2Gi
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /scripts
+          name: sync-script
+      dnsPolicy: ClusterFirst
+      hostNetwork: true
+      nodeSelector:
+        ex-lb: "true"
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      tolerations:
+      - operator: Exists
+      volumes:
+      - configMap:
+          defaultMode: 493
+          name: minio-lfs-sync-script
+        name: sync-script
+status:
+  availableReplicas: 1
+  conditions:
+  - lastTransitionTime: "2026-05-11T11:28:51Z"
+    lastUpdateTime: "2026-05-11T11:28:51Z"
+    message: Deployment has minimum availability.
+    reason: MinimumReplicasAvailable
+    status: "True"
+    type: Available
+  - lastTransitionTime: "2026-05-11T11:28:29Z"
+    lastUpdateTime: "2026-05-12T07:57:12Z"
+    message: ReplicaSet "mc-client-57ccdccbf9" has successfully progressed.
+    reason: NewReplicaSetAvailable
+    status: "True"
+    type: Progressing
+  observedGeneration: 8
+  readyReplicas: 1
+  replicas: 1
+  updatedReplicas: 1

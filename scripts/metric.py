@@ -28,10 +28,10 @@ CLUSTERS = {
 }
 
 CLUSTER_URLS = {
-    code: f"https://vm.{code}ai.scnet.cn:58043/select/0/prometheus/api/v1/query"
+    code: f"https://vm.{code}ai.scnet.cn:58043/select/0/prometheus"
     for code in CLUSTERS.keys()
 }
-CLUSTER_URLS["zz"] = "https://vm.zzai2.scnet.cn:58043/select/0/prometheus/api/v1/query"
+CLUSTER_URLS["zz"] = "https://vm.zzai2.scnet.cn:58043/select/0/prometheus"
 
 
 def get_cluster_url(cluster: str) -> str:
