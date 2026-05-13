@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 import requests
 
 
-OUTPUT_FILE = "/Users/humin/.config/opencode/skills/maas/available_models.md"
+OUTPUT_FILE = "~/agent/reports/available_models.md"
 CLUSTERS = [
     {"name": "昆山", "context": "ks", "namespace": "ske-model"},
     {"name": "郑州", "context": "zz", "namespace": "ske-model"},

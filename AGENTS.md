@@ -491,30 +491,22 @@ kubectl --context <ctx> -n ske-model exec <ske-model-tool-pod> -- \
 ```
 
 
-###  MinIO 桶扫描
-
-用户说“扫描 MinIO 桶”“出 MinIO 桶策略报告”“看桶权限/生命周期/版本控制”时，默认使用本地扫描脚本：
-
-```bash
-python ~/agent/minio/minio_scan.py
-```
-
 ###  MinIO 同步进度
 
-看桶级对象变化时：
+用户说“扫描模型”,“更新可用模型列表”,“探测 ks/zz 当前可用模型”时，默认执行：
 
 ```bash
-kubectl --context <ctx> -n ske exec deploy/mc-client -- mc stat local/<bucket>
-kubectl --context <ctx> -n ske exec deploy/mc-client -- mc ls local/<bucket>/
+python ~/agent/scripts/gitlab_sync_progress.py
 ```
 
 更多细节见 `~/agent/skills/minio/SKILL.md`。
 
 ###  扫描模型
 
-用户说“扫描模型”“更新可用模型列表”“探测 ks/zz 当前可用模型”时，默认执行：
+用户说“扫描模型”,“更新可用模型列表”,“探测 ks/zz 当前可用模型”时，默认执行：
 
 ```bash
-python ~/agent/maas/probe_models.py
+python ~/agent/scripts/probe_models.py
 ```
+并且把ske-model部署的模型相关yaml, 更新到/Users/humin/sugon/ske-chart/maas/
 

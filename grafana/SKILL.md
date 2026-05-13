@@ -39,7 +39,6 @@ curl -sk -u admin:sugon@123! -X POST 'https://grafana.ksai.scnet.cn:58043/api/da
 | aeh6piwqe1gjkb | Pod 资源计量 |
 | bea4kzmry7qiod | 模型训练 |
 | adslfq8amercw4 | 模型部署 |
-| bensv5jok3hmoe | 节点列表 |
 | xfpJB9FGz | 节点详情 |
 | becc3itr2rbb4d | 运营101 |
 
@@ -54,6 +53,6 @@ curl -sk -u admin:sugon@123! -X POST 'https://grafana.ksai.scnet.cn:58043/api/da
 ## 标准流程
 定位（uid + folder=ai） -> 判断 CM/API-only -> 备份 -> 修改 -> 更新索引 -> 回归验证
 
-协作：指标核验加载 `/Users/humin/agent/k8s-thanos/SKILL.md`。
+协作：指标核验加载 `~/agent/scripts/metric.py -h`。
 
 
