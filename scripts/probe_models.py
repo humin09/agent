@@ -4,11 +4,12 @@ import subprocess
 import time
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
+import os
 
 import requests
 
 
-OUTPUT_FILE = "~/agent/reports/available_models.md"
+OUTPUT_FILE = os.path.expanduser("~/agent/reports/available_models.md")
 CLUSTERS = [
     {"name": "昆山", "context": "ks", "namespace": "ske-model"},
     {"name": "郑州", "context": "zz", "namespace": "ske-model"},
