@@ -338,9 +338,21 @@ def collect_cluster_data(cluster):
     return {"records": records}
 
 
+def probe_chat_completions(url_prefix, model_id):
+    payload = {
+        "model": model_id,
+        "messages": [{"role": "user", "content": "你好"}],
+        "temperature": 0.7,
+        "stream": False,
+    }
+    response = probe_json_post(url_prefix + "/v1/chat/completions", payload, timeout=5)
+    return response is not None and response.status_code == 200
+
+
 def probe_host_details(url_prefix):
     details = {
         "url_prefix": url_prefix,
+        "chat_ok": False,
         "models_ok": False,
         "models_status": None,
         "models": [],
@@ -376,83 +388,119 @@ def probe_host_details(url_prefix):
         details["first_model"] = models[0].get("id", "")
 
     if details["first_model"]:
-        anthropic_payload = {
-            "model": details["first_model"],
-            "max_tokens": 1,
-            "messages": [{"role": "user", "content": "你好"}],
-            "stream": False,
-        }
-        anthropic_headers = {
-            "Content-Type": "application/json",
-            "anthropic-version": "2023-06-01",
-        }
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            anthropic_future = executor.submit(
-                probe_json_post,
-                f"{url_prefix}/v1/messages",
-                anthropic_payload,
-                5,
-                anthropic_headers,
-            )
-            basic_future = executor.submit(
-                probe_responses_basic,
-                url_prefix,
-                details["first_model"],
-            )
-            anthropic_response = anthropic_future.result()
-            basic_probe = basic_future.result()
+        # 测试 /v1/chat/completions 是否可用
+        chat_ok = probe_chat_completions(url_prefix, details["first_model"])
+        details["chat_ok"] = chat_ok
 
-        if anthropic_response is not None and anthropic_response.status_code == 200:
-            details["anthropic_supported"] = True
-            details["anthropic_status"] = "✅"
-        else:
-            details["anthropic_status"] = "❌"
+        # 仅当 chat/completions 通过时才检查其他协议
+        if chat_ok:
+            anthropic_payload = {
+                "model": details["first_model"],
+                "max_tokens": 1,
+                "messages": [{"role": "user", "content": "你好"}],
+                "stream": False,
+            }
+            anthropic_headers = {
+                "Content-Type": "application/json",
+                "anthropic-version": "2023-06-01",
+            }
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                anthropic_future = executor.submit(
+                    probe_json_post,
+                    f"{url_prefix}/v1/messages",
+                    anthropic_payload,
+                    5,
+                    anthropic_headers,
+                )
+                basic_future = executor.submit(
+                    probe_responses_basic,
+                    url_prefix,
+                    details["first_model"],
+                )
+                anthropic_response = anthropic_future.result()
+                basic_probe = basic_future.result()
 
-        if basic_probe["ok"]:
-            details["responses_supported"] = True
-            details["responses_status"] = "✅"
-
-            tools_probe = probe_responses_tools(url_prefix, details["first_model"])
-            if tools_probe["ok"] and (
-                tools_probe["tools_echoed"] or tools_probe["parallel_tool_calls"]
-            ):
-                details["responses_tools_supported"] = True
-                details["responses_tools_status"] = "✅"
+            if anthropic_response is not None and anthropic_response.status_code == 200:
+                details["anthropic_supported"] = True
+                details["anthropic_status"] = "✅"
             else:
-                status_code = tools_probe["status_code"]
-                details["responses_tools_status"] = (
+                details["anthropic_status"] = "❌"
+
+            if basic_probe["ok"]:
+                details["responses_supported"] = True
+                details["responses_status"] = "✅"
+
+                tools_probe = probe_responses_tools(url_prefix, details["first_model"])
+                if tools_probe["ok"] and (
+                    tools_probe["tools_echoed"] or tools_probe["parallel_tool_calls"]
+                ):
+                    details["responses_tools_supported"] = True
+                    details["responses_tools_status"] = "✅"
+                else:
+                    status_code = tools_probe["status_code"]
+                    details["responses_tools_status"] = (
+                        f"❌({status_code})" if status_code is not None else "❌"
+                    )
+            else:
+                status_code = basic_probe["status_code"]
+                details["responses_status"] = (
                     f"❌({status_code})" if status_code is not None else "❌"
                 )
-        else:
-            status_code = basic_probe["status_code"]
-            details["responses_status"] = (
-                f"❌({status_code})" if status_code is not None else "❌"
-            )
-            details["responses_tools_status"] = "未探测"
+                details["responses_tools_status"] = "未探测"
 
     return details
 
 
+def get_region_from_host(host):
+    """根据域名后缀判断集群，例如 ksai.scnet.cn -> 昆山"""
+    region_map = {
+        "ksai.scnet.cn": "昆山",
+        "zzai2.scnet.cn": "郑州",
+        "dzai.scnet.cn": "达州",
+        "qdai.scnet.cn": "青岛",
+        "szai.scnet.cn": "深圳",
+        "sd5ai.scnet.cn": "魏桥",
+        "whai.scnet.cn": "武汉",
+    }
+    for suffix, region in region_map.items():
+        if host.endswith(suffix):
+            return region
+    return None
+
+
 def render_host_probe(md, probe):
     url_prefix = probe["url_prefix"]
-    if probe["models_ok"]:
-        return md + f"- {url_prefix}:/v1/models ✅\n"
-    return md + f"- {url_prefix}:/v1/models ❌\n"
+    if probe["chat_ok"]:
+        return md + f"- {url_prefix}:/v1/chat/completions ✅\n"
+    return md + f"- {url_prefix}:/v1/chat/completions ❌\n"
 
 
 def generate_markdown(clusters_data):
     md = ""
+
+    # 收集所有模型的信息，用于生成汇总表格
+    all_models = {}
+    region_groups = {}
 
     for _, data in clusters_data.items():
         if not data["records"]:
             continue
 
         for record in data["records"]:
-            md += f"### {record['name']}\n"
+            # 跳过 maas-test
+            if record["name"] == "maas-test":
+                continue
 
             if not record["hosts"]:
-                md += "- /v1/models ❌\n"
-                md += f"- 副本数{record['replicas']}/{record['available']}\n\n"
+                # 无 host 的模型记录其副本状态
+                all_models[record["name"]] = {
+                    "chat_ok": False,
+                    "anthropic": "❌",
+                    "responses": "❌",
+                    "tools": "❌",
+                    "replicas": f"{record['replicas']}/{record['available']}",
+                    "region": None,
+                }
                 continue
 
             with ThreadPoolExecutor(
@@ -474,90 +522,133 @@ def generate_markdown(clusters_data):
                     None,
                 )
 
-            successful_probe = next((probe for probe in probes if probe["models_ok"]), primary_probe)
-            if successful_probe and successful_probe["models_ok"]:
-                md = render_host_probe(md, successful_probe)
-                md += f"- Anthropic 协议: {successful_probe['anthropic_status']}\n"
-                md += f"- OpenAI Responses 协议: {successful_probe['responses_status']}\n"
-                md += f"- Responses 多轮对话: {successful_probe['responses_multiturn_status']}\n"
-                md += f"- Responses 工具调用: {successful_probe['responses_tools_status']}\n"
-                first_model = successful_probe["first_model"]
-                first_max_len = "N/A"
-                if successful_probe["models"]:
-                    first_max_len = successful_probe["models"][0].get("max_model_len", "N/A")
-                md += f"- 模型信息: {first_model}\n"
-                md += f"- 模型最大上下文长度: {first_max_len}\n"
-                md += f"- 副本数{record['replicas']}/{record['available']}\n"
-                if first_model:
-                    md += "请求示例:\n"
+            successful_probe = next((probe for probe in probes if probe["chat_ok"]), primary_probe)
+
+            region = get_region_from_host(primary_host) if primary_host else None
+
+            if successful_probe and successful_probe["chat_ok"]:
+                all_models[record["name"]] = {
+                    "chat_ok": True,
+                    "anthropic": successful_probe["anthropic_status"],
+                    "responses": successful_probe["responses_status"],
+                    "tools": successful_probe["responses_tools_status"],
+                    "replicas": f"{record['replicas']}/{record['available']}",
+                    "region": region,
+                    "probe": successful_probe,
+                    "record": record,
+                }
+                if region:
+                    if region not in region_groups:
+                        region_groups[region] = []
+                    region_groups[region].append((record["name"], all_models[record["name"]]))
+            else:
+                fallback_probe = primary_probe or (probes[0] if probes else None)
+                all_models[record["name"]] = {
+                    "chat_ok": False,
+                    "anthropic": "❌",
+                    "responses": "❌",
+                    "tools": "❌",
+                    "replicas": f"{record['replicas']}/{record['available']}",
+                    "region": region,
+                }
+
+    # 生成汇总表格
+    md += "## 模型总览\n\n"
+    md += "| 模型 | /v1/chat/completions | Anthropic | Responses | 工具调用 | 副本数 |\n"
+    md += "|------|----------------------|-----------|-----------|---------|--------|\n"
+
+    for model_name in sorted(all_models.keys()):
+        model_info = all_models[model_name]
+        chat_status = "✅" if model_info["chat_ok"] else "❌"
+        md += f"| {model_name} | {chat_status} | {model_info['anthropic']} | {model_info['responses']} | {model_info['tools']} | {model_info['replicas']} |\n"
+
+    md += "\n"
+
+    # 按地区生成详细信息
+    for region in sorted(region_groups.keys()):
+        md += f"## {region}\n\n"
+        for model_name, model_info in region_groups[region]:
+            md += f"### {model_name}\n"
+
+            probe = model_info["probe"]
+            record = model_info["record"]
+
+            md += f"- /v1/chat/completions ✅\n"
+            md += f"- Anthropic 协议: {probe['anthropic_status']}\n"
+            md += f"- OpenAI Responses 协议: {probe['responses_status']}\n"
+            md += f"- Responses 工具调用: {probe['responses_tools_status']}\n"
+
+            first_model = probe["first_model"]
+            first_max_len = "N/A"
+            if probe["models"]:
+                first_max_len = probe["models"][0].get("max_model_len", "N/A")
+
+            md += f"- 模型信息: {first_model}\n"
+            md += f"- 模型最大上下文长度: {first_max_len}\n"
+            md += f"- 副本数: {record['replicas']}/{record['available']}\n\n"
+
+            if first_model:
+                md += "请求示例:\n"
+                md += "```bash\n"
+                md += f"curl -X POST '{probe['url_prefix']}/v1/chat/completions' \\\n"
+                md += "  -H 'Content-Type: application/json' \\\n"
+                md += "  -d '{\n"
+                md += f'    "model": "{first_model}",\n'
+                md += '    "messages": [{"role": "user", "content": "你好"}],\n'
+                md += '    "temperature": 0.7,\n'
+                md += '    "stream": false\n'
+                md += "  }'\n"
+                md += "```\n"
+
+                if probe["responses_supported"]:
+                    md += "OpenAI Responses 示例:\n"
                     md += "```bash\n"
-                    md += f"curl -X POST '{successful_probe['url_prefix']}/v1/chat/completions' \\\n"
+                    md += f"curl -X POST '{probe['url_prefix']}/v1/responses' \\\n"
                     md += "  -H 'Content-Type: application/json' \\\n"
                     md += "  -d '{\n"
                     md += f'    "model": "{first_model}",\n'
-                    md += '    "messages": [{"role": "user", "content": "你好"}],\n'
-                    md += '    "temperature": 0.7,\n'
-                    md += '    "stream": false\n'
+                    md += '    "input": "你好，请用一句话介绍你自己",\n'
+                    md += '    "max_output_tokens": 128\n'
                     md += "  }'\n"
                     md += "```\n"
-                    if successful_probe["responses_supported"]:
-                        md += "OpenAI Responses 示例:\n"
+                    md += "OpenAI Responses 多轮示例:\n"
+                    md += "```bash\n"
+                    md += f"curl -X POST '{probe['url_prefix']}/v1/responses' \\\n"
+                    md += "  -H 'Content-Type: application/json' \\\n"
+                    md += "  -d '{\n"
+                    md += f'    "model": "{first_model}",\n'
+                    md += '    "previous_response_id": "<上一轮返回的 id>",\n'
+                    md += '    "input": "继续展开上一轮回答",\n'
+                    md += '    "max_output_tokens": 128\n'
+                    md += "  }'\n"
+                    md += "```\n"
+
+                    if probe["responses_tools_supported"]:
+                        md += "OpenAI Responses 工具调用示例:\n"
                         md += "```bash\n"
-                        md += f"curl -X POST '{successful_probe['url_prefix']}/v1/responses' \\\n"
+                        md += f"curl -X POST '{probe['url_prefix']}/v1/responses' \\\n"
                         md += "  -H 'Content-Type: application/json' \\\n"
                         md += "  -d '{\n"
                         md += f'    "model": "{first_model}",\n'
-                        md += '    "input": "你好，请用一句话介绍你自己",\n'
+                        md += '    "input": "北京天气如何？如果需要就调用工具。",\n'
+                        md += '    "tool_choice": "auto",\n'
+                        md += '    "tools": [\n'
+                        md += '      {\n'
+                        md += '        "type": "function",\n'
+                        md += '        "name": "get_weather",\n'
+                        md += '        "description": "Get weather by city",\n'
+                        md += '        "parameters": {\n'
+                        md += '          "type": "object",\n'
+                        md += '          "properties": {\n'
+                        md += '            "city": {"type": "string"}\n'
+                        md += '          },\n'
+                        md += '          "required": ["city"]\n'
+                        md += '        }\n'
+                        md += '      }\n'
+                        md += '    ],\n'
                         md += '    "max_output_tokens": 128\n'
                         md += "  }'\n"
                         md += "```\n"
-                        md += "OpenAI Responses 多轮示例:\n"
-                        md += "```bash\n"
-                        md += f"curl -X POST '{successful_probe['url_prefix']}/v1/responses' \\\n"
-                        md += "  -H 'Content-Type: application/json' \\\n"
-                        md += "  -d '{\n"
-                        md += f'    "model": "{first_model}",\n'
-                        md += '    "previous_response_id": "<上一轮返回的 id>",\n'
-                        md += '    "input": "继续展开上一轮回答",\n'
-                        md += '    "max_output_tokens": 128\n'
-                        md += "  }'\n"
-                        md += "```\n"
-                        if successful_probe["responses_tools_supported"]:
-                            md += "OpenAI Responses 工具调用示例:\n"
-                            md += "```bash\n"
-                            md += f"curl -X POST '{successful_probe['url_prefix']}/v1/responses' \\\n"
-                            md += "  -H 'Content-Type: application/json' \\\n"
-                            md += "  -d '{\n"
-                            md += f'    "model": "{first_model}",\n'
-                            md += '    "input": "北京天气如何？如果需要就调用工具。",\n'
-                            md += '    "tool_choice": "auto",\n'
-                            md += '    "tools": [\n'
-                            md += '      {\n'
-                            md += '        "type": "function",\n'
-                            md += '        "name": "get_weather",\n'
-                            md += '        "description": "Get weather by city",\n'
-                            md += '        "parameters": {\n'
-                            md += '          "type": "object",\n'
-                            md += '          "properties": {\n'
-                            md += '            "city": {"type": "string"}\n'
-                            md += '          },\n'
-                            md += '          "required": ["city"]\n'
-                            md += '        }\n'
-                            md += '      }\n'
-                            md += '    ],\n'
-                            md += '    "max_output_tokens": 128\n'
-                            md += "  }'\n"
-                            md += "```\n"
-            else:
-                fallback_probe = primary_probe or probes[0]
-                md = render_host_probe(md, fallback_probe)
-                md += "- Anthropic 协议: ❌\n"
-                md += f"- OpenAI Responses 协议: {fallback_probe['responses_status']}\n"
-                md += "- Responses 多轮对话: 示例，未实测\n"
-                md += f"- Responses 工具调用: {fallback_probe['responses_tools_status']}\n"
-                md += "- 模型信息: ❌\n"
-                md += "- 模型最大上下文长度: N/A\n"
-                md += f"- 副本数{record['replicas']}/{record['available']}\n"
 
             md += "\n"
 
