@@ -7,11 +7,11 @@
 | deepseek-r1-0528-8b | ❌ | ❌ | ❌ | ❌ | 20/20 |
 | deepseek-r1-70b | ✅ | ❌ | ❌(404) | 未探测 | 3/3 |
 | deepseek-v4-flash | ✅ | ✅ | ✅ | ✅ | 1/1 |
-| deepseek-v4-pro | ✅ | ✅ | ✅ | ✅ | 1/1 |
-| minimax-m25-int8-vip | ✅ | ✅ | ✅ | ✅ | 25/25 |
-| qwen3-30b | ✅ | ❌ | ❌(404) | 未探测 | 4/4 |
+| deepseek-v4-pro | ❌ | ❌ | ❌ | ❌ | 1/1 |
+| minimax-m25-int8-vip | ✅ | ✅ | ✅ | ❌ | 25/25 |
+| qwen3-30b | ❌ | ❌ | ❌ | ❌ | 4/4 |
 | qwen3-embedding-8b | ✅ | ❌ | ❌(404) | 未探测 | 8/8 |
-| qwen35-122b-a10 | ❌ | ❌ | ❌ | ❌ | 1/1 |
+| qwen35-122b-a10 | ✅ | ✅ | ❌(400) | 未探测 | 1/1 |
 | qwen36-27b | ❌ | ❌ | ❌ | ❌ | 2/2 |
 | qwen36-35b-a3b | ❌ | ❌ | ❌ | ❌ | 1/1 |
 | qwq-32b | ❌ | ❌ | ❌ | ❌ | 11/11 |
@@ -148,94 +148,6 @@ curl -X POST 'http://deepseek-v4-flash.ksai.scnet.cn:58000/v1/responses' \
   }'
 ```
 
-### deepseek-v4-pro
-- /v1/chat/completions ✅
-- Anthropic 协议: ✅
-- OpenAI Responses 协议: ✅
-- Responses 工具调用: ✅
-- 模型信息: deepseek-v4-pro
-- 模型最大上下文长度: 1000000
-- 副本数: 1/1
-
-请求示例:
-```bash
-curl -X POST 'http://deepseek-v4-pro.ksai.scnet.cn:58000/v1/chat/completions' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model": "deepseek-v4-pro",
-    "messages": [{"role": "user", "content": "你好"}],
-    "temperature": 0.7,
-    "stream": false
-  }'
-```
-OpenAI Responses 示例:
-```bash
-curl -X POST 'http://deepseek-v4-pro.ksai.scnet.cn:58000/v1/responses' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model": "deepseek-v4-pro",
-    "input": "你好，请用一句话介绍你自己",
-    "max_output_tokens": 128
-  }'
-```
-OpenAI Responses 多轮示例:
-```bash
-curl -X POST 'http://deepseek-v4-pro.ksai.scnet.cn:58000/v1/responses' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model": "deepseek-v4-pro",
-    "previous_response_id": "<上一轮返回的 id>",
-    "input": "继续展开上一轮回答",
-    "max_output_tokens": 128
-  }'
-```
-OpenAI Responses 工具调用示例:
-```bash
-curl -X POST 'http://deepseek-v4-pro.ksai.scnet.cn:58000/v1/responses' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model": "deepseek-v4-pro",
-    "input": "北京天气如何？如果需要就调用工具。",
-    "tool_choice": "auto",
-    "tools": [
-      {
-        "type": "function",
-        "name": "get_weather",
-        "description": "Get weather by city",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "city": {"type": "string"}
-          },
-          "required": ["city"]
-        }
-      }
-    ],
-    "max_output_tokens": 128
-  }'
-```
-
-### qwen3-30b
-- /v1/chat/completions ✅
-- Anthropic 协议: ❌
-- OpenAI Responses 协议: ❌(404)
-- Responses 工具调用: 未探测
-- 模型信息: /opt/model/Qwen3-30B-A3B
-- 模型最大上下文长度: 131072
-- 副本数: 4/4
-
-请求示例:
-```bash
-curl -X POST 'http://qwen3-30b.ksai.scnet.cn:58000/v1/chat/completions' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model": "/opt/model/Qwen3-30B-A3B",
-    "messages": [{"role": "user", "content": "你好"}],
-    "temperature": 0.7,
-    "stream": false
-  }'
-```
-
 ### qwen3-embedding-8b
 - /v1/chat/completions ✅
 - Anthropic 协议: ❌
@@ -263,7 +175,7 @@ curl -X POST 'http://qwen3-embedding-8b.ksai.scnet.cn:58000/v1/chat/completions'
 - /v1/chat/completions ✅
 - Anthropic 协议: ✅
 - OpenAI Responses 协议: ✅
-- Responses 工具调用: ✅
+- Responses 工具调用: ❌
 - 模型信息: /models/MiniMax-M2.5-W8A8
 - 模型最大上下文长度: 196608
 - 副本数: 25/25
@@ -300,29 +212,25 @@ curl -X POST 'http://minimax-m25-int8-vip.zzai2.scnet.cn:58000/v1/responses' \
     "max_output_tokens": 128
   }'
 ```
-OpenAI Responses 工具调用示例:
+
+### qwen35-122b-a10
+- /v1/chat/completions ✅
+- Anthropic 协议: ✅
+- OpenAI Responses 协议: ❌(400)
+- Responses 工具调用: 未探测
+- 模型信息: Qwen3.5-122B-A10B
+- 模型最大上下文长度: 65536
+- 副本数: 1/1
+
+请求示例:
 ```bash
-curl -X POST 'http://minimax-m25-int8-vip.zzai2.scnet.cn:58000/v1/responses' \
+curl -X POST 'http://qwen35-122b-a10.zzai2.scnet.cn:58000/v1/chat/completions' \
   -H 'Content-Type: application/json' \
   -d '{
-    "model": "/models/MiniMax-M2.5-W8A8",
-    "input": "北京天气如何？如果需要就调用工具。",
-    "tool_choice": "auto",
-    "tools": [
-      {
-        "type": "function",
-        "name": "get_weather",
-        "description": "Get weather by city",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "city": {"type": "string"}
-          },
-          "required": ["city"]
-        }
-      }
-    ],
-    "max_output_tokens": 128
+    "model": "Qwen3.5-122B-A10B",
+    "messages": [{"role": "user", "content": "你好"}],
+    "temperature": 0.7,
+    "stream": false
   }'
 ```
 

@@ -509,9 +509,10 @@ python ~/agent/scripts/logs.py -n ske-model -a deepseek-r1 --logs-only --start 3
 
 ## 节点排查
 
-需要明确集群, 节点ip. 节点进行排查有两种情况:
+需要明确集群、节点 IP。节点进行排查有两种情况：
 
-当节点处于ready:
+### 节点 Ready 状态
+
 ```bash
 kubectl node-shell --context <ctx> <node_ip>
 kubectl node-shell --context <ctx> <node_ip> -- crictl ps -a
@@ -519,8 +520,82 @@ kubectl node-shell --context <ctx> <node_ip> -- systemctl status kubelet
 kubectl node-shell --context <ctx> <node_ip> -- journalctl -u kubelet -n 200 --no-pager
 kubectl node-shell --context <ctx> <node_ip> -- journalctl -u containerd -n 200 --no-pager
 ```
-当节点not ready:
-找到kubeasz节点 ip->`kubectl node-shell --context <ctx> <kubeasz_node_ip> -- ssh root@ip`
+
+### 节点 NotReady 状态
+
+**关键约束**：NotReady 节点无法直接通过 `node-shell` 访问，必须通过 `kubeasz=true` 节点作为跳板进行 SSH 免密登录。
+
+**步骤**：
+
+1. **定位 kubeasz 管理节点**
+   ```bash
+   kubectl --context <ctx> get node -l kubeasz=true -o wide
+   ```
+
+2. **通过 kubeasz 节点进入故障 NotReady 节点**
+   ```bash
+   # 先登录 kubeasz 节点
+   kubectl node-shell --context <ctx> <kubeasz_node_ip>
+   
+   # 然后从 kubeasz 节点 SSH 免密到故障节点
+   ssh root@<target_node_ip>
+   ```
+
+3. **进入故障节点后执行诊断**
+   ```bash
+   systemctl status kubelet
+   systemctl status containerd
+   journalctl -u kubelet -n 200 --no-pager
+   journalctl -u containerd -n 200 --no-pager
+   df -h
+   free -h
+   mount | grep -E '/data|nfs|cifs'
+   ```
+
+### 节点故障诊断矩阵
+
+| 故障现象 | 可能原因 | 诊断命令 | 修复思路 |
+|---------|--------|--------|--------|
+| **节点状态 NotReady** | kubelet 故障、网络异常、资源耗尽 | `systemctl status kubelet`、`journalctl -u kubelet -n 200` | 检查 kubelet 进程、磁盘空间、内存状态 |
+| **无法 ping 通** | 节点网络隔离、网卡故障、路由错误 | `ping <node_ip>`、`ip link`、`route -n` | 检查节点网卡状态、路由表、iptables 规则 |
+| **无法 SSH 免密登录** | SSH daemon 故障、authorized_keys 权限错误 | `systemctl status sshd`、`journalctl -u sshd` | 重启 sshd、检查 `/root/.ssh/authorized_keys` 权限（600） |
+| **kubelet / containerd 进程挂了** | 内存溢出、磁盘满、系统 panic | `systemctl status kubelet containerd`、`journalctl -xe` | 释放磁盘空间、检查内存、重启服务 |
+| **containerd 异常（/data 未挂载）** | 存储卷未挂载、磁盘掉线、挂载点丢失 | `mount \| grep /data`、`lsblk`、`df -h` | 重新挂载存储卷、检查磁盘健康状态 |
+| **节点被 cordon** | 人工隔离、自动 cordon（如硬件故障） | `kubectl --context <ctx> describe node <node_name>` | 确认原因后执行 `kubectl uncordon` 或修复硬件 |
+| **共享盘未挂载** | NFS/存储服务故障、挂载脚本失败 | `mount \| grep -E 'nfs\|cifs'`、`showmount -e <nfs_server>` | 检查 NFS 服务、手动重新挂载或运行初始化脚本 |
+| **硬件故障（autoCordon 标记）** | 磁盘、网卡、CPU、内存硬件故障 | `journalctl -u kubelet --grep "autoCordon"`、`dmesg \| tail -50` | 检查 `metadata.annotations.autoCordon`、更换硬件或下线节点 |
+
+### 快速诊断流程
+
+1. **检查节点状态**
+   ```bash
+   kubectl --context <ctx> describe node <node_name>
+   kubectl --context <ctx> get node <node_name> -o yaml | grep -A 5 "conditions:"
+   ```
+
+2. **若节点 Ready，直接进入排查**
+   ```bash
+   kubectl node-shell --context <ctx> <node_ip> -- systemctl status kubelet
+   kubectl node-shell --context <ctx> <node_ip> -- systemctl status containerd
+   kubectl node-shell --context <ctx> <node_ip> -- df -h
+   kubectl node-shell --context <ctx> <node_ip> -- free -h
+   kubectl node-shell --context <ctx> <node_ip> -- mount | grep -E '/data|nfs|cifs'
+   ```
+
+3. **若节点 NotReady 或无法连接，通过 kubeasz 跳板**
+   ```bash
+   # 先定位 kubeasz 节点
+   kubectl --context <ctx> get node -l kubeasz=true -o wide
+   
+   # 通过跳板 SSH，然后执行诊断
+   kubectl node-shell --context <ctx> <kubeasz_ip> -- ssh root@<target_ip> 'systemctl status kubelet; journalctl -u kubelet -n 100'
+   ```
+
+4. **检查硬件故障注解**
+   ```bash
+   kubectl --context <ctx> get node <node_name> -o yaml | grep -i "autoCordon"
+   ```
+   - 若标记存在，说明节点已被自动隔离，需要人工确认故障后修复或下线。
 
 
 
