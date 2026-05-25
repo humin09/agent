@@ -12,9 +12,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import hashlib
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
 import urllib.parse
 from typing import Optional, Dict, Any
@@ -27,6 +29,9 @@ STATE_PATH = "/tmp/gitlab-sync-state.json"
 DEFAULT_CLUSTERS = ["ks", "dz", "zz", "qd"]
 DEFAULT_WINDOW_HOURS = 3
 RATE_WINDOW_MIN = 15
+STATE_READ_RETRIES = 6
+STATE_READ_RETRY_DELAY = 1.0
+STATE_STABLE_READS = 2
 
 CLUSTER_VM_URLS = {
     "ks": "https://vm.ksai.scnet.cn:58043/select/0/prometheus",
@@ -34,6 +39,14 @@ CLUSTER_VM_URLS = {
     "zz": "https://vm.zzai2.scnet.cn:58043/select/0/prometheus",
     "qd": "https://vm.qdai.scnet.cn:58043/select/0/prometheus",
 }
+
+TOTAL_PREFIXES = 65536
+IGNORE_BUCKETS = {"loki", "prom", "tmp", "k8s"}
+
+
+def should_ignore_bucket(bucket: str) -> bool:
+    """过滤系统桶：精确匹配 loki/prom/tmp/k8s，及所有 k8s* 前缀桶。"""
+    return bucket in IGNORE_BUCKETS or bucket.startswith("k8s")
 
 
 class MetricsClient:
@@ -116,6 +129,76 @@ def read_state(ctx: str, pod: str) -> dict:
         return json.loads(out)
     except json.JSONDecodeError:
         return {}
+
+
+def read_state_raw(ctx: str, pod: str) -> str:
+    """读取状态文件原文，失败时返回空字符串。"""
+    rc, out, _ = run([
+        "kubectl", "--context", ctx, "-n", NS,
+        "exec", pod, "--", "cat", STATE_PATH,
+    ])
+    if rc != 0:
+        return ""
+    return out
+
+
+def read_state_stable(
+    ctx: str,
+    pod: str,
+    retries: int = STATE_READ_RETRIES,
+    delay: float = STATE_READ_RETRY_DELAY,
+    stable_reads: int = STATE_STABLE_READS,
+) -> tuple[dict, bool]:
+    """读取状态文件，要求连续读取到一致且可解析的 JSON 才算稳定。"""
+    last_state: dict = {}
+    last_digest: str | None = None
+    consecutive_same = 0
+
+    for attempt in range(1, retries + 1):
+        raw = read_state_raw(ctx, pod)
+        if not raw.strip():
+            consecutive_same = 0
+            last_digest = None
+            if attempt < retries:
+                time.sleep(delay)
+            continue
+
+        try:
+            state = json.loads(raw)
+        except json.JSONDecodeError:
+            consecutive_same = 0
+            last_digest = None
+            if attempt < retries:
+                time.sleep(delay)
+            continue
+
+        digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+        last_state = state
+        if digest == last_digest:
+            consecutive_same += 1
+        else:
+            consecutive_same = 1
+        last_digest = digest
+
+        if consecutive_same >= stable_reads:
+            return state, True
+
+        if attempt < retries:
+            time.sleep(delay)
+    return last_state, False
+
+
+def collect_pod_snapshot(ctx: str, pod: str, node_ip: str) -> dict[str, Any]:
+    """并发采集单个 mc-client pod 的快照。"""
+    state, stable = read_state_stable(ctx, pod)
+    return {
+        "pod": pod,
+        "node": node_ip,
+        "state": state,
+        "stable": stable,
+        "running": read_running_prefix(ctx, pod),
+        "rx_tx": pod_net_rate(ctx, pod),
+    }
 
 
 def read_running_prefix(ctx: str, pod: str) -> str | None:
@@ -225,9 +308,6 @@ def fetch_minio_metrics(ctx: str) -> Dict[str, Any]:
 
     metrics = {}
 
-    # 忽略的桶列表
-    IGNORE_BUCKETS = {"loki", "prom"}
-
     # 集群级指标
     cluster_queries = {
         "health": "minio_cluster_health_status",
@@ -268,7 +348,7 @@ def fetch_minio_metrics(ctx: str) -> Dict[str, Any]:
             for item in values:
                 bucket = item.get("metric", {}).get("bucket", "unknown")
                 # 跳过忽略的桶
-                if bucket in IGNORE_BUCKETS:
+                if should_ignore_bucket(bucket):
                     continue
                 val = float(item.get("value", [0, "0"])[1])
                 if bucket not in bucket_data:
@@ -279,11 +359,11 @@ def fetch_minio_metrics(ctx: str) -> Dict[str, Any]:
     return metrics
 
 
-def fmt_summary(ctx: str, window_hours: int, rate_min: int, markdown: bool = True) -> str:
-    """生成 gitlab-lfs 同步进度报告（支持 markdown 表格格式）"""
+def collect_sync_report(ctx: str, window_hours: int, rate_min: int) -> dict[str, Any]:
+    """采集单个集群的同步状态，返回结构化报告数据。"""
     pods = list_pods(ctx)
     if not pods:
-        return f"[{ctx}] 无 mc-client pods\n"
+        raise RuntimeError(f"[{ctx}] 无 mc-client pods")
 
     window_seconds = window_hours * 3600
     rate_seconds = rate_min * 60
@@ -294,16 +374,52 @@ def fmt_summary(ctx: str, window_hours: int, rate_min: int, markdown: bool = Tru
     per_pod = []
     aggregated_state: dict = {}
 
+    pod_results: dict[str, dict[str, Any]] = {}
+    with ThreadPoolExecutor(max_workers=min(len(pods), 8)) as executor:
+        future_map = {executor.submit(collect_pod_snapshot, ctx, pod, node_ip): pod for pod, node_ip in pods}
+        for future in as_completed(future_map):
+            pod = future_map[future]
+            try:
+                pod_results[pod] = future.result()
+            except Exception as e:
+                pod_results[pod] = {
+                    "state": {},
+                    "stable": False,
+                    "running": None,
+                    "rx_tx": (0.0, 0.0),
+                    "error": e,
+                    "pod": pod,
+                    "node": next((n for p, n in pods if p == pod), ""),
+                }
+
+    unstable_pods = [pod for pod, result in pod_results.items() if not result.get("stable")]
+    missing_pods = [pod for pod, result in pod_results.items() if not result.get("state")]
+    if unstable_pods or missing_pods:
+        details = []
+        if unstable_pods:
+            details.append(f"未稳定的 pod: {', '.join(unstable_pods)}")
+        if missing_pods:
+            details.append(f"空状态 pod: {', '.join(missing_pods)}")
+        raise RuntimeError(f"[{ctx}] 未能读取到稳定状态，{'；'.join(details)}")
+
     for pod, node_ip in pods:
-        state = read_state(ctx, pod)
-        running = read_running_prefix(ctx, pod)
+        result = pod_results.get(pod, {})
+        state = result.get("state", {})
+        running = result.get("running")
+        rx, tx = result.get("rx_tx", (0.0, 0.0))
+
         win = aggregate_window(state, window_seconds)
         rate = compute_rate(state, rate_seconds)
-        rx, tx = pod_net_rate(ctx, pod)
 
         per_pod.append({
-            "pod": pod, "node": node_ip, "shard_entries": len(state),
-            "win": win, "running": running, "rate": rate, "rx": rx, "tx": tx,
+            "pod": pod,
+            "node": node_ip,
+            "shard_entries": len(state),
+            "win": win,
+            "running": running,
+            "rate": rate,
+            "rx": rx,
+            "tx": tx,
         })
         total_recent_ok += win["success"]
         total_recent_fail += win["failed"]
@@ -321,24 +437,56 @@ def fmt_summary(ctx: str, window_hours: int, rate_min: int, markdown: bool = Tru
                 if v_ts > cur_ts:
                     aggregated_state[k] = v
 
-    # cluster-wide totals from merged state
-    cluster_win = aggregate_window(aggregated_state, window_seconds)
+    if any(result.get("stable") is False for result in pod_results.values()):
+        raise RuntimeError(f"[{ctx}] 状态文件未达到稳定读取条件，已拒绝汇总")
 
-    # Total prefixes: 65536 (00/00 to ff/ff for level-2, or 256 for level-1)
-    total_prefixes = 65536
+    cluster_win = aggregate_window(aggregated_state, window_seconds)
+    prefixes_done = len(aggregated_state)
+    active_pods = [p["pod"] for p in per_pod if p.get("running")]
+    sync_complete = prefixes_done >= TOTAL_PREFIXES and not active_pods
+
+    return {
+        "ctx": ctx,
+        "pods": per_pod,
+        "aggregated_state": aggregated_state,
+        "cluster_win": cluster_win,
+        "total_recent_ok": total_recent_ok,
+        "total_recent_fail": total_recent_fail,
+        "total_done_ok": total_done_ok,
+        "total_done_fail": total_done_fail,
+        "total_rate": total_rate,
+        "total_prefixes": TOTAL_PREFIXES,
+        "prefixes_done": prefixes_done,
+        "active_pods": active_pods,
+        "sync_complete": sync_complete,
+        "sync_status": "✅" if sync_complete else "⌛️",
+        "sync_progress": "已完成" if sync_complete else f"进行中 ({prefixes_done}/{TOTAL_PREFIXES})",
+        "window_hours": window_hours,
+        "rate_min": rate_min,
+    }
+
+
+def format_sync_summary(report: dict[str, Any], markdown: bool = True) -> str:
+    """根据结构化同步报告输出 Markdown 或纯文本。"""
+    ctx = report["ctx"]
+    window_hours = report["window_hours"]
+    rate_min = report["rate_min"]
+    per_pod = report["pods"]
+    total_done_ok = report["total_done_ok"]
+    total_done_fail = report["total_done_fail"]
+    total_rate = report["total_rate"]
+    cluster_win = report["cluster_win"]
+    prefixes_done = report["prefixes_done"]
+    total_prefixes = report["total_prefixes"]
 
     if markdown:
         lines = [f"#### {ctx.upper()} 集群\n"]
-
-        # 集群总体统计
-        prefixes_done = len(aggregated_state)
-        prefixes_progress = f"{prefixes_done}/{total_prefixes}" if prefixes_done < total_prefixes else "✅ 已完成"
-        lines.append(f"**同步进度**：{prefixes_progress}")
+        lines.append(f"**同步状态**：{report['sync_status']} {report['sync_progress']}")
         lines.append(f"**历史统计**：成功 {total_done_ok} | 失败 {total_done_fail}")
         lines.append(f"**近 {window_hours}h**：成功 {cluster_win['success']} | 失败 {cluster_win['failed']}")
-        lines.append(f"**同步速率**：{total_rate:.2f} prefix/min\n")
+        lines.append(f"**同步速率**：{total_rate:.2f} prefix/min")
+        lines.append(f"**已见前缀**：{prefixes_done}/{total_prefixes}\n")
 
-        # Pod 详情表格
         lines.append("| Pod | 节点 | 条目数 | 近期成功/失败 | 速率(/min) | RX/TX(MiB/s) | 当前处理 |")
         lines.append("|-----|------|--------|--------------|----------|--------------|---------|")
 
@@ -350,33 +498,79 @@ def fmt_summary(ctx: str, window_hours: int, rate_min: int, markdown: bool = Tru
             )
         lines.append("")
         return "\n".join(lines)
-    else:
-        # 原始文本格式
-        lines = [f"\n=== [{ctx}] gitlab-lfs sync (window {window_hours}h, rate window {rate_min}min) ==="]
+
+    lines = [f"\n=== [{ctx}] gitlab-lfs sync (window {window_hours}h, rate window {rate_min}min) ==="]
+    lines.append(
+        f"  sync: {report['sync_progress']}  "
+        f"history success={total_done_ok} failed={total_done_fail}"
+    )
+    lines.append(
+        f"  last {window_hours}h: success={cluster_win['success']}  "
+        f"failed={cluster_win['failed']}"
+    )
+    lines.append(
+        f"  rate (last {rate_min}m): {total_rate:.2f} prefix/min"
+    )
+    for p in per_pod:
         lines.append(
-            f"  cluster total: prefixes_seen={len(aggregated_state)}/{total_prefixes}  "
-            f"success={total_done_ok}  failed={total_done_fail}"
-        )
-        lines.append(
-            f"  last {window_hours}h: success={cluster_win['success']}  "
-            f"failed={cluster_win['failed']}  "
-            f"(per-pod sum: ok={total_recent_ok} fail={total_recent_fail})"
-        )
-        lines.append(
-            f"  rate (last {rate_min}m): {total_rate:.2f} prefix/min"
+            f"  - {p['pod']:13s} node={p['node']:15s} "
+            f"entries={p['shard_entries']:3d}  "
+            f"recent ok/fail={p['win']['success']}/{p['win']['failed']}  "
+            f"rate={p['rate']:.2f}/min  "
+            f"net rx/tx={p['rx']:6.1f}/{p['tx']:6.1f} MiB/s  "
+            f"now={p['running'] or '-'}"
         )
 
-        for p in per_pod:
-            lines.append(
-                f"  - {p['pod']:13s} node={p['node']:15s} "
-                f"entries={p['shard_entries']:3d}  "
-                f"recent ok/fail={p['win']['success']}/{p['win']['failed']}  "
-                f"rate={p['rate']:.2f}/min  "
-                f"net rx/tx={p['rx']:6.1f}/{p['tx']:6.1f} MiB/s  "
-                f"now={p['running'] or '-'}"
-            )
+    return "\n".join(lines) + "\n"
 
-        return "\n".join(lines) + "\n"
+
+def format_bucket_section(ctx: str, buckets: dict[str, dict[str, float]]) -> list[str]:
+    """输出单个集群的桶分析，排除系统桶。"""
+    lines = [f"#### {ctx.upper()} 集群\n"]
+    filtered_buckets = {
+        bucket: data for bucket, data in buckets.items()
+        if not should_ignore_bucket(bucket)
+    }
+    if not filtered_buckets:
+        lines.append("*无可分析桶（已排除 loki/prom/tmp/k8s）*\n")
+        return lines
+
+    sorted_buckets = sorted(
+        filtered_buckets.items(),
+        key=lambda x: x[1].get("bucket_size", 0),
+        reverse=True,
+    )
+
+    lines.append("| 桶名 | 大小(GB) | 对象数 | 上传(MB/s) | 下载(MB/s) | 请求/5m | 4xx错误 | 5xx错误 | 总错误率 |")
+    lines.append("|------|----------|--------|-----------|-----------|---------|---------|---------|----------|")
+
+    for bucket, data in sorted_buckets:
+        size_gb = data.get("bucket_size", 0) / (1024**3)
+        objs = int(data.get("bucket_objects", 0))
+        rx_mb = data.get("bucket_rx", 0) / (1024**2)
+        tx_mb = data.get("bucket_tx", 0) / (1024**2)
+        req = data.get("bucket_requests", 0)
+        err_4xx = data.get("bucket_4xx", 0)
+        err_5xx = data.get("bucket_5xx", 0)
+        err_total = err_4xx + err_5xx
+        err_pct = (err_total / req * 100) if req > 0 else 0
+
+        lines.append(
+            f"| {bucket} | {size_gb:.2f} | {objs} | {rx_mb:.2f} | {tx_mb:.2f} | {req:.0f} | "
+            f"{err_4xx:.0f} | {err_5xx:.0f} | {err_pct:.2f}% |"
+        )
+
+    lines.append("")
+    return lines
+
+
+def fmt_summary(ctx: str, window_hours: int, rate_min: int, markdown: bool = True) -> str:
+    """生成 gitlab-lfs 同步进度报告（支持 markdown 表格格式）"""
+    try:
+        report = collect_sync_report(ctx, window_hours, rate_min)
+    except Exception as exc:
+        return f"[{ctx}] 同步进度采集失败：{exc}\n"
+    return format_sync_summary(report, markdown=markdown)
 
 
 def format_bytes(b: float) -> str:
@@ -397,32 +591,60 @@ def format_rate(val: float, unit: str = "/s") -> str:
     return f"{val:.2f}T{unit}"
 
 
+def parallel_map_contexts(contexts: list[str], worker, max_workers: int | None = None) -> dict[str, Any]:
+    """并行处理各集群任务，返回 {ctx: result}。"""
+    if not contexts:
+        return {}
+
+    if max_workers is None:
+        max_workers = min(len(contexts), 4)
+
+    results: dict[str, Any] = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_map = {executor.submit(worker, ctx): ctx for ctx in contexts}
+        for future in as_completed(future_map):
+            ctx = future_map[future]
+            try:
+                results[ctx] = future.result()
+            except Exception as e:
+                results[ctx] = e
+    return results
+
+
 def gen_comprehensive_report(contexts: list[str], window_hours: int, rate_min: int) -> str:
     """生成综合报告：gitlab-lfs 同步进度 + MinIO 指标"""
     lines = []
     lines.append("# MinIO 与 GitLab-LFS 同步综合监控报告")
     lines.append(f"*生成时间：{time.strftime('%Y-%m-%d %H:%M:%S')}*\n")
 
-    # 第一部分：GitLab-LFS 同步进度
-    lines.append("## 📊 一、GitLab-LFS 同步进度\n")
+    # 第一部分：集群同步完成态
+    lines.append("## 📊 一、集群同步完成态\n")
+    sync_reports = parallel_map_contexts(contexts, lambda ctx: collect_sync_report(ctx, window_hours, rate_min))
     for ctx in contexts:
-        try:
-            lines.append(fmt_summary(ctx, window_hours, rate_min, markdown=True))
-        except subprocess.TimeoutExpired:
-            lines.append(f"### [{ctx}] 超时\n")
-        except Exception as e:
-            lines.append(f"### [{ctx}] 错误：{e}\n")
+        result = sync_reports.get(ctx)
+        if isinstance(result, Exception):
+            lines.append(f"#### {ctx.upper()} 集群\n")
+            lines.append(f"**同步状态**：⌛️ 采集失败 ({result})\n")
+            continue
+        lines.append(f"#### {ctx.upper()} 集群\n")
+        lines.append(f"**同步状态**：{result['sync_status']} {result['sync_progress']}")
+        lines.append(f"**历史统计**：成功 {result['total_done_ok']} | 失败 {result['total_done_fail']}")
+        lines.append(f"**近 {window_hours}h**：成功 {result['cluster_win']['success']} | 失败 {result['cluster_win']['failed']}")
+        lines.append(f"**同步速率**：{result['total_rate']:.2f} prefix/min")
+        lines.append("")
 
     # 第二部分：MinIO 集群指标
-    lines.append("\n## 🔧 二、MinIO 集群状态\n")
+    lines.append("## 🔧 二、MinIO 桶分析\n")
 
+    metrics_results = parallel_map_contexts(contexts, fetch_minio_metrics)
     all_metrics = {}
     for ctx in contexts:
-        try:
-            metrics = fetch_minio_metrics(ctx)
-            all_metrics[ctx] = metrics
-        except Exception as e:
-            print(f"[{ctx}] MinIO 指标查询失败: {e}", file=sys.stderr)
+        result = metrics_results.get(ctx, {})
+        if isinstance(result, Exception):
+            print(f"[{ctx}] MinIO 指标查询失败: {result}", file=sys.stderr)
+            all_metrics[ctx] = {}
+        else:
+            all_metrics[ctx] = result
 
     # 2.1 集群级指标对比表
     lines.append("### 2.1 集群级指标对比\n")
@@ -460,39 +682,7 @@ def gen_comprehensive_report(contexts: list[str], window_hours: int, rate_min: i
         if not m or "buckets" not in m:
             continue
 
-        lines.append(f"#### {ctx.upper()} 集群\n")
-        buckets = m.get("buckets", {})
-        if not buckets:
-            lines.append("*无桶数据*\n")
-            continue
-
-        # 按使用量排序
-        sorted_buckets = sorted(
-            buckets.items(),
-            key=lambda x: x[1].get("bucket_size", 0),
-            reverse=True
-        )
-
-        lines.append("| 桶名 | 大小(GB) | 对象数 | 上传(MB/s) | 下载(MB/s) | 请求/5m | 4xx错误 | 5xx错误 | 总错误率 |")
-        lines.append("|------|----------|--------|-----------|-----------|---------|---------|---------|----------|")
-
-        for bucket, data in sorted_buckets:
-            size_gb = data.get("bucket_size", 0) / (1024**3)
-            objs = int(data.get("bucket_objects", 0))
-            rx_mb = data.get("bucket_rx", 0) / (1024**2)
-            tx_mb = data.get("bucket_tx", 0) / (1024**2)
-            req = data.get("bucket_requests", 0)
-            err_4xx = data.get("bucket_4xx", 0)
-            err_5xx = data.get("bucket_5xx", 0)
-            err_total = err_4xx + err_5xx
-            err_pct = (err_total / req * 100) if req > 0 else 0
-
-            lines.append(
-                f"| {bucket} | {size_gb:.2f} | {objs} | {rx_mb:.2f} | {tx_mb:.2f} | {req:.0f} | "
-                f"{err_4xx:.0f} | {err_5xx:.0f} | {err_pct:.2f}% |"
-            )
-
-        lines.append("")
+        lines.extend(format_bucket_section(ctx, m.get("buckets", {})))
 
     # 第三部分：关键告警和建议
     lines.append("\n## ⚠️ 三、关键告警与建议\n")
@@ -573,13 +763,15 @@ def main() -> int:
         lines.append("# MinIO 集群监控报告")
         lines.append(f"*生成时间：{time.strftime('%Y-%m-%d %H:%M:%S')}*\n")
 
+        metrics_results = parallel_map_contexts(args.contexts, fetch_minio_metrics)
         all_metrics = {}
         for ctx in args.contexts:
-            try:
-                metrics = fetch_minio_metrics(ctx)
-                all_metrics[ctx] = metrics
-            except Exception as e:
-                print(f"[{ctx}] MinIO 指标查询失败: {e}", file=sys.stderr)
+            result = metrics_results.get(ctx, {})
+            if isinstance(result, Exception):
+                print(f"[{ctx}] MinIO 指标查询失败: {result}", file=sys.stderr)
+                all_metrics[ctx] = {}
+            else:
+                all_metrics[ctx] = result
 
         # 集群级指标对比
         lines.append("## 集群级指标对比\n")
@@ -616,38 +808,7 @@ def main() -> int:
             if not m or "buckets" not in m:
                 continue
 
-            lines.append(f"### {ctx.upper()} 集群\n")
-            buckets = m.get("buckets", {})
-            if not buckets:
-                lines.append("*无桶数据*\n")
-                continue
-
-            sorted_buckets = sorted(
-                buckets.items(),
-                key=lambda x: x[1].get("bucket_size", 0),
-                reverse=True
-            )
-
-            lines.append("| 桶名 | 大小(GB) | 对象数 | 上传(MB/s) | 下载(MB/s) | 请求/5m | 4xx错误 | 5xx错误 | 总错误率 |")
-            lines.append("|------|----------|--------|-----------|-----------|---------|---------|---------|----------|")
-
-            for bucket, data in sorted_buckets:
-                size_gb = data.get("bucket_size", 0) / (1024**3)
-                objs = int(data.get("bucket_objects", 0))
-                rx_mb = data.get("bucket_rx", 0) / (1024**2)
-                tx_mb = data.get("bucket_tx", 0) / (1024**2)
-                req = data.get("bucket_requests", 0)
-                err_4xx = data.get("bucket_4xx", 0)
-                err_5xx = data.get("bucket_5xx", 0)
-                err_total = err_4xx + err_5xx
-                err_pct = (err_total / req * 100) if req > 0 else 0
-
-                lines.append(
-                    f"| {bucket} | {size_gb:.2f} | {objs} | {rx_mb:.2f} | {tx_mb:.2f} | {req:.0f} | "
-                    f"{err_4xx:.0f} | {err_5xx:.0f} | {err_pct:.2f}% |"
-                )
-
-            lines.append("")
+            lines.extend(format_bucket_section(ctx, m.get("buckets", {})))
 
         report_content = "\n".join(lines)
         # 保存 MinIO 报告
