@@ -273,7 +273,7 @@ NotReady 或已 Cordon 节点：先找 `kubeasz=true` 节点，再通过 `node-s
 
 - 扫描多集群 MinIO 同步进度：`python ~/agent/scripts/minio_scan.py -c ks zz qd dz`
 
-更多规则见 `~/agent/skills/minio/SKILL.md`.
+更多规则见 `~/agent/minio/SKILL.md`.
 
 ## 8. 专项 Skill 入口
 
@@ -284,5 +284,6 @@ NotReady 或已 Cordon 节点：先找 `kubeasz=true` 节点，再通过 `node-s
 - Ex-LB：`~/agent/ex-lb/SKILL.md`
 - Grafana：`~/agent/grafana/SKILL.md`
 - KubeSphere：`~/agent/kubesphere/SKILL.md`
+- MinIO：`~/agent/minio/SKILL.md`
 
 遇到对应专项问题时，先读取对应 Skill，再执行诊断或变更.
