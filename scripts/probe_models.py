@@ -6,7 +6,7 @@ import os
 import subprocess
 import urllib.error
 import urllib.request
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -17,7 +17,9 @@ CLUSTERS = [
     {"name": "昆山", "context": "ks", "namespace": "ske-model"},
     {"name": "郑州", "context": "zz", "namespace": "ske-model"},
 ]
-MAX_PROBE_WORKERS = 12
+MAX_PROBE_WORKERS = 6
+LIVENESS_TIMEOUT_SECONDS = 6
+PROBE_TIMEOUT_SECONDS = 60
 PROTOCOLS = ["chat_completions", "responses", "anthropic_messages"]
 CAPABILITY_KEYS = [
     "basic",
@@ -712,39 +714,25 @@ def get_region_from_host(host):
     return None
 
 
-def probe_host_details(url_prefix):
+def probe_liveness(url_prefix):
+    request = urllib.request.Request(f"{url_prefix}/v1/models", method="GET")
     try:
-        import requests
-
-        model_response = requests.get(f"{url_prefix}/v1/models", timeout=6)
+        with urllib.request.urlopen(request, timeout=LIVENESS_TIMEOUT_SECONDS) as response:
+            status = response.status
+            text = response.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as exc:
+        return _liveness_skeleton(url_prefix, exc.code)
     except Exception as exc:
-        return {
-            "url_prefix": url_prefix,
-            "models_status": "Connection failed",
-            "models_ok": False,
-            "models": [],
-            "first_model": "",
-            "probe_result": None,
-            "protocol_status": {},
-            "error": str(exc),
-        }
-
-    details = {
-        "url_prefix": url_prefix,
-        "models_status": model_response.status_code,
-        "models_ok": False,
-        "models": [],
-        "first_model": "",
-        "probe_result": None,
-        "protocol_status": {},
-    }
-
-    if model_response.status_code != 200:
+        details = _liveness_skeleton(url_prefix, "Connection failed")
+        details["error"] = str(exc)
         return details
 
-    try:
-        model_data = model_response.json()
-    except Exception:
+    details = _liveness_skeleton(url_prefix, status)
+    if status != 200:
+        return details
+
+    model_data = _loads_or_none(text)
+    if model_data is None:
         details["models_status"] = "Invalid JSON"
         return details
 
@@ -753,23 +741,42 @@ def probe_host_details(url_prefix):
     details["models"] = models
     if models:
         details["first_model"] = models[0].get("id", "")
+    return details
 
-    if not details["first_model"]:
+
+def _liveness_skeleton(url_prefix, status):
+    return {
+        "url_prefix": url_prefix,
+        "models_status": status,
+        "models_ok": False,
+        "models": [],
+        "first_model": "",
+        "probe_result": None,
+        "protocol_status": {},
+    }
+
+
+def probe_host_full(liveness):
+    details = dict(liveness)
+    details["probe_result"] = None
+    details["protocol_status"] = {}
+    if not details.get("first_model"):
         return details
 
     result = probe_service(
-        base_url=url_prefix,
+        base_url=details["url_prefix"],
         model=details["first_model"],
         protocols=PROTOCOLS,
         output_tokens=128,
         temperature=0.0,
-        request_timeout_seconds=120,
+        request_timeout_seconds=PROBE_TIMEOUT_SECONDS,
     )
     details["probe_result"] = result
     details["protocol_status"] = {
         name: {
             "supported": item.get("supported", False),
             "status_code": item.get("status_code"),
+            "capabilities": item.get("capabilities", {}),
             "tests": item.get("tests", {}),
         }
         for name, item in result.get("protocols", {}).items()
@@ -777,77 +784,110 @@ def probe_host_details(url_prefix):
     return details
 
 
-def generate_markdown(clusters_data):
-    md = ""
+def collect_model_probes(clusters_data):
+    probe_records = []
     all_models = {}
-    region_groups = {}
 
     for _, data in clusters_data.items():
-        if not data["records"]:
-            continue
-
-        for record in data["records"]:
+        for record in data.get("records", []):
             if record["name"] == "maas-test":
                 continue
-
             if not record["hosts"]:
                 all_models[record["name"]] = {
                     "protocols": {},
                     "replicas": f"{record['replicas']}/{record['available']}",
                     "region": None,
                 }
-                continue
-
-            with ThreadPoolExecutor(
-                max_workers=min(len(record["hosts"]), MAX_PROBE_WORKERS)
-            ) as executor:
-                probes = list(
-                    executor.map(
-                        lambda host: probe_host_details(f"http://{host}:58000"),
-                        record["hosts"],
-                    )
-                )
-
-            primary_host = pick_primary_host(record["hosts"], record["name"])
-            primary_probe = None
-            if primary_host:
-                primary_url = f"http://{primary_host}:58000"
-                primary_probe = next(
-                    (probe for probe in probes if probe["url_prefix"] == primary_url),
-                    None,
-                )
-
-            successful_probe = next(
-                (
-                    probe
-                    for probe in probes
-                    if probe.get("probe_result", {}).get("summary", {}).get("chat_completions_supported")
-                ),
-                primary_probe,
-            )
-
-            region = get_region_from_host(primary_host) if primary_host else None
-
-            if successful_probe and successful_probe.get("probe_result"):
-                protocol_status = successful_probe.get("protocol_status", {})
-                all_models[record["name"]] = {
-                    "protocols": protocol_status,
-                    "replicas": f"{record['replicas']}/{record['available']}",
-                    "region": region,
-                    "probe": successful_probe,
-                    "record": record,
-                }
-                if region:
-                    region_groups.setdefault(region, []).append(
-                        (record["name"], all_models[record["name"]])
-                    )
             else:
-                all_models[record["name"]] = {
-                    "protocols": {},
-                    "replicas": f"{record['replicas']}/{record['available']}",
-                    "region": region,
-                }
+                probe_records.append(record)
 
+    # 阶段1：并发对每个 (record, host) 做轻量探活（/v1/models）。
+    liveness_tasks = [
+        (idx, host, f"http://{host}:58000")
+        for idx, record in enumerate(probe_records)
+        for host in record["hosts"]
+    ]
+    liveness_map = {}
+    with ThreadPoolExecutor(max_workers=MAX_PROBE_WORKERS) as executor:
+        futures = {
+            executor.submit(probe_liveness, url): (idx, host)
+            for idx, host, url in liveness_tasks
+        }
+        for future in as_completed(futures):
+            liveness_map[futures[future]] = future.result()
+
+    # 阶段2：每个 record 选一个探活成功的主机做完整探测（同一 record 的多 host 通常是
+    # 同一 service 的别名，只探主机即可，避免对每个 host 重复跑完整能力测试）。
+    full_tasks = []
+    for idx, record in enumerate(probe_records):
+        live_hosts = sorted(
+            (h for h in record["hosts"] if liveness_map.get((idx, h), {}).get("first_model")),
+            key=lambda h: host_sort_key(h, record["name"]),
+        )
+        if live_hosts:
+            full_tasks.append((idx, liveness_map[(idx, live_hosts[0])]))
+
+    # 阶段3：并发完整探测。
+    full_map = {}
+    with ThreadPoolExecutor(max_workers=MAX_PROBE_WORKERS) as executor:
+        futures = {
+            executor.submit(probe_host_full, liveness): idx
+            for idx, liveness in full_tasks
+        }
+        for future in as_completed(futures):
+            full_map[futures[future]] = future.result()
+
+    # 阶段4：组装结果。
+    region_groups = {}
+    for idx, record in enumerate(probe_records):
+        primary_host = pick_primary_host(record["hosts"], record["name"])
+        region = get_region_from_host(primary_host) if primary_host else None
+        probe = full_map.get(idx)
+
+        if probe and probe.get("probe_result"):
+            all_models[record["name"]] = {
+                "protocols": probe.get("protocol_status", {}),
+                "replicas": f"{record['replicas']}/{record['available']}",
+                "region": region,
+                "probe": probe,
+                "record": record,
+            }
+            if region:
+                region_groups.setdefault(region, []).append(
+                    (record["name"], all_models[record["name"]])
+                )
+        else:
+            all_models[record["name"]] = {
+                "protocols": {},
+                "replicas": f"{record['replicas']}/{record['available']}",
+                "region": region,
+            }
+
+    return all_models, region_groups
+
+
+PROTOCOL_LABELS = {
+    "chat_completions": "OpenAI Chat Completions",
+    "responses": "OpenAI Responses",
+    "anthropic_messages": "Anthropic Messages",
+}
+CAPABILITY_COLUMNS = [
+    ("basic", "basic"),
+    ("stream", "stream"),
+    ("usage", "usage"),
+    ("tool_calls", "tool_calls"),
+    ("json_output", "JSON output"),
+    ("structured_output", "structured output"),
+    ("error_format", "error format"),
+]
+
+
+def yes_no(value):
+    return "是" if value else "否"
+
+
+def render_markdown(all_models, region_groups):
+    md = ""
     md += "## 模型总览\n\n"
     md += "| 模型 | Chat | Responses | Anthropic | 副本数 |\n"
     md += "|------|------|-----------|-----------|--------|\n"
@@ -870,25 +910,34 @@ def generate_markdown(clusters_data):
             record = model_info["record"]
             protocol_status = probe.get("protocol_status", {})
 
-            md += f"- URL: {probe['url_prefix']}\n"
-            md += f"- 模型列表: {probe['models_status']}\n"
-            if probe.get("first_model"):
-                md += f"- 首个模型: {probe['first_model']}\n"
-            for protocol in PROTOCOLS:
-                item = protocol_status.get(protocol, {})
-                state = "✅" if item.get("supported") else "❌"
-                md += f"- {protocol}: {state}"
-                if item.get("status_code") is not None:
-                    md += f" ({item['status_code']})"
-                md += "\n"
-
             first_model = probe.get("first_model", "")
             first_max_len = "N/A"
             if probe.get("models"):
                 first_max_len = probe["models"][0].get("max_model_len", "N/A")
 
+            md += "**模型信息**\n\n"
+            md += f"- 模型名称: {model_name}\n"
+            md += f"- base_url: {probe['url_prefix']}\n"
+            md += f"- model_id: {first_model}\n"
             md += f"- 模型最大上下文长度: {first_max_len}\n"
             md += f"- 副本数: {record['replicas']}/{record['available']}\n\n"
+
+            header = ["协议", "支持", "状态码"] + [label for _, label in CAPABILITY_COLUMNS]
+            md += "**协议支持总览**\n\n"
+            md += "| " + " | ".join(header) + " |\n"
+            md += "|" + "|".join("---" for _ in header) + "|\n"
+            for protocol in PROTOCOLS:
+                item = protocol_status.get(protocol, {})
+                caps = item.get("capabilities", {})
+                status_code = item.get("status_code")
+                cells = [
+                    PROTOCOL_LABELS.get(protocol, protocol),
+                    yes_no(item.get("supported")),
+                    str(status_code) if status_code is not None else "-",
+                ]
+                cells += [yes_no(caps.get(key)) for key, _ in CAPABILITY_COLUMNS]
+                md += "| " + " | ".join(cells) + " |\n"
+            md += "\n"
 
             if first_model:
                 md += "请求示例:\n"
@@ -936,7 +985,8 @@ def main():
     for cluster in CLUSTERS:
         clusters_data[cluster["name"]] = collect_cluster_data(cluster)
 
-    markdown = generate_markdown(clusters_data)
+    all_models, region_groups = collect_model_probes(clusters_data)
+    markdown = render_markdown(all_models, region_groups)
 
     with open(OUTPUT_FILE, "w", encoding="utf-8") as file_obj:
         file_obj.write(markdown)
