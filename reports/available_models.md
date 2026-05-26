@@ -32,9 +32,9 @@
 
 | 协议 | 支持 | 状态码 | basic | stream | usage | tool_calls | JSON output | structured output | error format |
 |---|---|---|---|---|---|---|---|---|---|
-| OpenAI Chat Completions | 是 | 200 | 是 | 是 | 是 | 否 | 否 | 否 | 是 |
-| OpenAI Responses | 否 | 404 | 否 | 否 | 否 | 否 | 否 | 否 | 否 |
-| Anthropic Messages | 否 | 404 | 否 | 否 | 否 | 否 | 否 | 否 | 否 |
+| OpenAI Chat Completions | ✅ | 200 | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ |
+| OpenAI Responses | ❌ | 404 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Anthropic Messages | ❌ | 404 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 
 请求示例:
 ```bash
@@ -61,9 +61,9 @@ curl -X POST 'http://deepseek-32b.ksai.scnet.cn:58000/v1/chat/completions' \
 
 | 协议 | 支持 | 状态码 | basic | stream | usage | tool_calls | JSON output | structured output | error format |
 |---|---|---|---|---|---|---|---|---|---|
-| OpenAI Chat Completions | 是 | 200 | 是 | 是 | 是 | 否 | 是 | 否 | 是 |
-| OpenAI Responses | 否 | 404 | 否 | 否 | 否 | 否 | 否 | 否 | 否 |
-| Anthropic Messages | 否 | 404 | 否 | 否 | 否 | 否 | 否 | 否 | 否 |
+| OpenAI Chat Completions | ✅ | 200 | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ | ✅ |
+| OpenAI Responses | ❌ | 404 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Anthropic Messages | ❌ | 404 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 
 请求示例:
 ```bash
@@ -90,9 +90,9 @@ curl -X POST 'http://deepseek-7b.ksai.scnet.cn:58000/v1/chat/completions' \
 
 | 协议 | 支持 | 状态码 | basic | stream | usage | tool_calls | JSON output | structured output | error format |
 |---|---|---|---|---|---|---|---|---|---|
-| OpenAI Chat Completions | 是 | 200 | 是 | 是 | 是 | 否 | 是 | 是 | 是 |
-| OpenAI Responses | 否 | 404 | 否 | 否 | 否 | 否 | 否 | 否 | 否 |
-| Anthropic Messages | 否 | 404 | 否 | 否 | 否 | 否 | 否 | 否 | 否 |
+| OpenAI Chat Completions | ✅ | 200 | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ |
+| OpenAI Responses | ❌ | 404 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Anthropic Messages | ❌ | 404 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 
 请求示例:
 ```bash
@@ -119,9 +119,9 @@ curl -X POST 'http://deepseek-r1-0528-8b.ksai.scnet.cn:58000/v1/chat/completions
 
 | 协议 | 支持 | 状态码 | basic | stream | usage | tool_calls | JSON output | structured output | error format |
 |---|---|---|---|---|---|---|---|---|---|
-| OpenAI Chat Completions | 是 | 200 | 是 | 是 | 是 | 否 | 是 | 是 | 是 |
-| OpenAI Responses | 否 | 404 | 否 | 否 | 否 | 否 | 否 | 否 | 否 |
-| Anthropic Messages | 否 | 404 | 否 | 否 | 否 | 否 | 否 | 否 | 否 |
+| OpenAI Chat Completions | ✅ | 200 | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ |
+| OpenAI Responses | ❌ | 404 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Anthropic Messages | ❌ | 404 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 
 请求示例:
 ```bash
@@ -148,9 +148,9 @@ curl -X POST 'http://deepseek-r1-70b.ksai.scnet.cn:58000/v1/chat/completions' \
 
 | 协议 | 支持 | 状态码 | basic | stream | usage | tool_calls | JSON output | structured output | error format |
 |---|---|---|---|---|---|---|---|---|---|
-| OpenAI Chat Completions | 是 | 200 | 是 | 是 | 是 | 是 | 是 | 是 | 是 |
-| OpenAI Responses | 是 | 200 | 是 | 是 | 是 | 是 | 是 | 是 | 是 |
-| Anthropic Messages | 是 | 200 | 是 | 是 | 是 | 是 | 是 | 是 | 是 |
+| OpenAI Chat Completions | ✅ | 200 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| OpenAI Responses | ✅ | 200 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Anthropic Messages | ✅ | 200 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 请求示例:
 ```bash
@@ -187,9 +187,9 @@ curl -X POST 'http://deepseek-v4-flash.ksai.scnet.cn:58000/v1/responses' \
 
 | 协议 | 支持 | 状态码 | basic | stream | usage | tool_calls | JSON output | structured output | error format |
 |---|---|---|---|---|---|---|---|---|---|
-| OpenAI Chat Completions | 是 | 200 | 是 | 是 | 是 | 是 | 是 | 是 | 是 |
-| OpenAI Responses | 是 | 200 | 是 | 是 | 是 | 是 | 是 | 是 | 是 |
-| Anthropic Messages | 是 | 200 | 是 | 是 | 是 | 是 | 是 | 是 | 是 |
+| OpenAI Chat Completions | ✅ | 200 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| OpenAI Responses | ✅ | 200 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Anthropic Messages | ✅ | 200 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 请求示例:
 ```bash
@@ -226,9 +226,9 @@ curl -X POST 'http://deepseek-v4-pro.ksai.scnet.cn:58000/v1/responses' \
 
 | 协议 | 支持 | 状态码 | basic | stream | usage | tool_calls | JSON output | structured output | error format |
 |---|---|---|---|---|---|---|---|---|---|
-| OpenAI Chat Completions | 是 | 200 | 是 | 是 | 是 | 是 | 是 | 是 | 是 |
-| OpenAI Responses | 否 | 404 | 否 | 否 | 否 | 否 | 否 | 否 | 否 |
-| Anthropic Messages | 否 | 404 | 否 | 否 | 否 | 否 | 否 | 否 | 否 |
+| OpenAI Chat Completions | ✅ | 200 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| OpenAI Responses | ❌ | 404 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Anthropic Messages | ❌ | 404 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 
 请求示例:
 ```bash
@@ -255,9 +255,9 @@ curl -X POST 'http://qwen3-30b.ksai.scnet.cn:58000/v1/chat/completions' \
 
 | 协议 | 支持 | 状态码 | basic | stream | usage | tool_calls | JSON output | structured output | error format |
 |---|---|---|---|---|---|---|---|---|---|
-| OpenAI Chat Completions | 是 | 200 | 是 | 是 | 否 | 否 | 是 | 是 | 是 |
-| OpenAI Responses | 否 | 404 | 否 | 否 | 否 | 否 | 否 | 否 | 否 |
-| Anthropic Messages | 否 | 404 | 否 | 否 | 否 | 否 | 否 | 否 | 否 |
+| OpenAI Chat Completions | ✅ | 200 | ✅ | ✅ | ❌ | ❌ | ✅ | ✅ | ✅ |
+| OpenAI Responses | ❌ | 404 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Anthropic Messages | ❌ | 404 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 
 请求示例:
 ```bash
@@ -284,9 +284,9 @@ curl -X POST 'http://qwen3-embedding-8b.ksai.scnet.cn:58000/v1/chat/completions'
 
 | 协议 | 支持 | 状态码 | basic | stream | usage | tool_calls | JSON output | structured output | error format |
 |---|---|---|---|---|---|---|---|---|---|
-| OpenAI Chat Completions | 是 | 200 | 是 | 是 | 是 | 是 | 是 | 是 | 是 |
-| OpenAI Responses | 是 | 200 | 是 | 是 | 是 | 否 | 是 | 是 | 是 |
-| Anthropic Messages | 是 | 200 | 是 | 是 | 是 | 是 | 是 | 是 | 是 |
+| OpenAI Chat Completions | ✅ | 200 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| OpenAI Responses | ✅ | 200 | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ |
+| Anthropic Messages | ✅ | 200 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 请求示例:
 ```bash
@@ -323,9 +323,9 @@ curl -X POST 'http://qwen36-35b-a3b.ksai.scnet.cn:58000/v1/responses' \
 
 | 协议 | 支持 | 状态码 | basic | stream | usage | tool_calls | JSON output | structured output | error format |
 |---|---|---|---|---|---|---|---|---|---|
-| OpenAI Chat Completions | 是 | 200 | 是 | 是 | 是 | 否 | 是 | 否 | 是 |
-| OpenAI Responses | 否 | 404 | 否 | 否 | 否 | 否 | 否 | 否 | 否 |
-| Anthropic Messages | 否 | 404 | 否 | 否 | 否 | 否 | 否 | 否 | 否 |
+| OpenAI Chat Completions | ✅ | 200 | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ | ✅ |
+| OpenAI Responses | ❌ | 404 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Anthropic Messages | ❌ | 404 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 
 请求示例:
 ```bash
@@ -354,9 +354,9 @@ curl -X POST 'http://qwq-32b.ksai.scnet.cn:58000/v1/chat/completions' \
 
 | 协议 | 支持 | 状态码 | basic | stream | usage | tool_calls | JSON output | structured output | error format |
 |---|---|---|---|---|---|---|---|---|---|
-| OpenAI Chat Completions | 是 | 200 | 是 | 是 | 是 | 是 | 是 | 是 | 是 |
-| OpenAI Responses | 是 | 200 | 是 | 是 | 是 | 是 | 是 | 是 | 是 |
-| Anthropic Messages | 是 | 200 | 是 | 是 | 是 | 是 | 是 | 是 | 是 |
+| OpenAI Chat Completions | ✅ | 200 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| OpenAI Responses | ✅ | 200 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Anthropic Messages | ✅ | 200 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 请求示例:
 ```bash
@@ -393,9 +393,9 @@ curl -X POST 'http://minimax-m25-int8-vip.zzai2.scnet.cn:58000/v1/responses' \
 
 | 协议 | 支持 | 状态码 | basic | stream | usage | tool_calls | JSON output | structured output | error format |
 |---|---|---|---|---|---|---|---|---|---|
-| OpenAI Chat Completions | 是 | 200 | 是 | 是 | 是 | 否 | 是 | 是 | 是 |
-| OpenAI Responses | 否 | 400 | 否 | 否 | 否 | 否 | 否 | 否 | 否 |
-| Anthropic Messages | 是 | 200 | 是 | 是 | 是 | 否 | 是 | 是 | 是 |
+| OpenAI Chat Completions | ✅ | 200 | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ |
+| OpenAI Responses | ❌ | 400 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Anthropic Messages | ✅ | 200 | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ |
 
 请求示例:
 ```bash
@@ -422,9 +422,9 @@ curl -X POST 'http://qwen35-122b-a10.zzai2.scnet.cn:58000/v1/chat/completions' \
 
 | 协议 | 支持 | 状态码 | basic | stream | usage | tool_calls | JSON output | structured output | error format |
 |---|---|---|---|---|---|---|---|---|---|
-| OpenAI Chat Completions | 是 | 200 | 是 | 是 | 是 | 是 | 是 | 是 | 是 |
-| OpenAI Responses | 是 | 200 | 是 | 是 | 是 | 是 | 是 | 是 | 是 |
-| Anthropic Messages | 是 | 200 | 是 | 是 | 是 | 是 | 是 | 是 | 是 |
+| OpenAI Chat Completions | ✅ | 200 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| OpenAI Responses | ✅ | 200 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Anthropic Messages | ✅ | 200 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 请求示例:
 ```bash

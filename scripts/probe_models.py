@@ -883,7 +883,7 @@ CAPABILITY_COLUMNS = [
 
 
 def yes_no(value):
-    return "是" if value else "否"
+    return "✅" if value else "❌"
 
 
 def render_markdown(all_models, region_groups):
