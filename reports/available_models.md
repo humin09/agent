@@ -8,7 +8,9 @@
 | deepseek-r1-70b | ✅ | ❌ | ❌ | 3/3 |
 | deepseek-v4-flash | ✅ | ✅ | ✅ | 2/2 |
 | deepseek-v4-pro | ✅ | ✅ | ✅ | 1/1 |
+| minimax-m25-int8 | ✅ | ✅ | ✅ | 1/1 |
 | minimax-m25-int8-vip | ✅ | ✅ | ✅ | 50/33 |
+| qwen3-235b-a22b | ✅ | ✅ | ✅ | 1/1 |
 | qwen3-30b | ✅ | ❌ | ❌ | 4/4 |
 | qwen3-embedding-8b | ✅ | ❌ | ❌ | 8/8 |
 | qwen35-122b-a10 | ✅ | ❌ | ✅ | 1/1 |
@@ -16,6 +18,7 @@
 | qwen36-27b-test | ✅ | ✅ | ✅ | 1/1 |
 | qwen36-35b-a3b | ✅ | ✅ | ✅ | 1/1 |
 | qwq-32b | ✅ | ❌ | ❌ | 11/11 |
+| ske-model-tool | ❌ | ❌ | ❌ | 1/1 |
 
 ## 昆山
 
@@ -32,7 +35,7 @@
 
 | 协议 | 支持 | 状态码 | basic | stream | usage | tool_calls | JSON output | structured output | error format |
 |---|---|---|---|---|---|---|---|---|---|
-| OpenAI Chat Completions | ✅ | 200 | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ |
+| OpenAI Chat Completions | ✅ | 200 | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ | ✅ |
 | OpenAI Responses | ❌ | 404 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Anthropic Messages | ❌ | 404 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 
@@ -339,6 +342,86 @@ curl -X POST 'http://qwq-32b.ksai.scnet.cn:58000/v1/chat/completions' \
   }'
 ```
 
+## 纽约
+
+### minimax-m25-int8
+**模型信息**
+
+- 模型名称: minimax-m25-int8
+- base_url: http://minimax-m25-int8.zzai.scnet.ai:58000
+- model_id: MiniMax-M2.5-W8A8
+- 模型最大上下文长度: 196608
+- 副本数: 1/1
+
+**协议支持总览**
+
+| 协议 | 支持 | 状态码 | basic | stream | usage | tool_calls | JSON output | structured output | error format |
+|---|---|---|---|---|---|---|---|---|---|
+| OpenAI Chat Completions | ✅ | 200 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| OpenAI Responses | ✅ | 200 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Anthropic Messages | ✅ | 200 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+请求示例:
+```bash
+curl -X POST 'http://minimax-m25-int8.zzai.scnet.ai:58000/v1/chat/completions' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "MiniMax-M2.5-W8A8",
+    "messages": [{"role": "user", "content": "你好"}],
+    "temperature": 0.7,
+    "stream": false
+  }'
+```
+OpenAI Responses 示例:
+```bash
+curl -X POST 'http://minimax-m25-int8.zzai.scnet.ai:58000/v1/responses' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "MiniMax-M2.5-W8A8",
+    "input": "你好，请用一句话介绍你自己",
+    "max_output_tokens": 128
+  }'
+```
+
+### qwen3-235b-a22b
+**模型信息**
+
+- 模型名称: qwen3-235b-a22b
+- base_url: http://qwen3-235b-a22b.zzai.scnet.ai:58000
+- model_id: Qwen3-235B-A22B
+- 模型最大上下文长度: 32768
+- 副本数: 1/1
+
+**协议支持总览**
+
+| 协议 | 支持 | 状态码 | basic | stream | usage | tool_calls | JSON output | structured output | error format |
+|---|---|---|---|---|---|---|---|---|---|
+| OpenAI Chat Completions | ✅ | 200 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| OpenAI Responses | ✅ | 200 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Anthropic Messages | ✅ | 200 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+请求示例:
+```bash
+curl -X POST 'http://qwen3-235b-a22b.zzai.scnet.ai:58000/v1/chat/completions' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "Qwen3-235B-A22B",
+    "messages": [{"role": "user", "content": "你好"}],
+    "temperature": 0.7,
+    "stream": false
+  }'
+```
+OpenAI Responses 示例:
+```bash
+curl -X POST 'http://qwen3-235b-a22b.zzai.scnet.ai:58000/v1/responses' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "Qwen3-235B-A22B",
+    "input": "你好，请用一句话介绍你自己",
+    "max_output_tokens": 128
+  }'
+```
+
 ## 郑州
 
 ### minimax-m25-int8-vip
@@ -424,7 +507,7 @@ curl -X POST 'http://qwen35-122b-a10.zzai2.scnet.cn:58000/v1/chat/completions' \
 |---|---|---|---|---|---|---|---|---|---|
 | OpenAI Chat Completions | ✅ | 200 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | OpenAI Responses | ✅ | 200 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Anthropic Messages | ✅ | 200 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Anthropic Messages | ✅ | 200 | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ |
 
 请求示例:
 ```bash

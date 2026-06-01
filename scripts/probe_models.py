@@ -16,6 +16,7 @@ OUTPUT_FILE = os.path.expanduser("~/agent/reports/available_models.md")
 CLUSTERS = [
     {"name": "昆山", "context": "ks", "namespace": "ske-model"},
     {"name": "郑州", "context": "zz", "namespace": "ske-model"},
+    {"name": "纽约", "context": "ny", "namespace": "ske-model"},
 ]
 MAX_PROBE_WORKERS = 6
 LIVENESS_TIMEOUT_SECONDS = 6
@@ -702,6 +703,7 @@ def get_region_from_host(host):
     region_map = {
         "ksai.scnet.cn": "昆山",
         "zzai2.scnet.cn": "郑州",
+        "zzai.scnet.ai": "纽约",
         "dzai.scnet.cn": "达州",
         "qdai.scnet.cn": "青岛",
         "szai.scnet.cn": "深圳",

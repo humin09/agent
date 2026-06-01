@@ -137,6 +137,7 @@ globs: ["**/*"]
 | 深圳 | `https://<app>.szai.scnet.cn:58043` |
 | 魏桥 | `https://<app>.sd5ai.scnet.cn:58043` |
 | 武汉 | `https://<app>.whai.scnet.cn:58043` |
+| 纽约 | `https://<app>.zzai.scnet.ai:58043` |
 
 HTTP 端口改为 `58000`.常见 app：`ingress`、`vm`、`vl`、模型服务名.
 
@@ -284,6 +285,5 @@ NotReady 或已 Cordon 节点：先找 `kubeasz=true` 节点，再通过 `node-s
 - Ex-LB：`~/agent/ex-lb/SKILL.md`
 - Grafana：`~/agent/grafana/SKILL.md`
 - KubeSphere：`~/agent/kubesphere/SKILL.md`
-- MinIO：`~/agent/minio/SKILL.md`
 
 遇到对应专项问题时，先读取对应 Skill，再执行诊断或变更.
