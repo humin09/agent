@@ -276,6 +276,61 @@ NotReady 或已 Cordon 节点：先找 `kubeasz=true` 节点，再通过 `node-s
 
 更多规则见 `~/agent/minio/SKILL.md`.
 
+
+### 7.8 K8s 用户资源组和挂载路径策略
+
+Kyverno 策略通过 Helm template 化管理，支持按 namespace 灵活配置挂载白名单和资源组限制。
+
+**配置文件：** `/Users/humin/sugon/ske-chart/kyverno/values.yaml` 中的 `policies` 字段
+
+**三个参数：**
+
+1. **`additionalPaths`** — 允许的挂载路径（配置基础路径，模板自动衍生 `/mnt/` 前缀和通配符）
+2. **`resourceGroupNames`** — 允许的资源组名列表（对应 volcano.sh/resource-group annotation）
+3. **`resourceGroupIds`** — 允许的资源组 ID 列表（同时白名单）
+
+**示例：** 为 `storuser1` namespace 开通 `/work2/ai_data` 和资源组 `113`
+
+```yaml
+policies:
+  storuser1:
+    additionalPaths:
+      - /work2/ai_data
+    resourceGroupNames:
+      - "hx1hgbwnormal9306af58"
+    resourceGroupIds:
+      - "113"
+```
+
+模板自动生成：
+- 挂载白名单：`/dev`, `/opt/hyhal` (固定) + `/work2/ai_data`, `/work2/ai_data/*`, `/mnt/work2/ai_data`, `/mnt/work2/ai_data/*`
+- 资源组白名单：`hx1hgbwnormal9306af58` 和 `113` 都允许
+
+**部署示例（storuser1）：**
+```bash
+helm install kyverno-template /Users/humin/sugon/ske-chart/kyverno \
+  -f /Users/humin/sugon/ske-chart/kyverno/values-storuser1.yaml \
+  --context <ctx> -n ske
+```
+
+**升级现有部署：**
+```bash
+helm upgrade kyverno-template /Users/humin/sugon/ske-chart/kyverno \
+  -f /Users/humin/sugon/ske-chart/kyverno/values-storuser1.yaml \
+  --context <ctx> -n ske
+```
+
+**同时部署多个用户：**
+```bash
+helm install kyverno-template /Users/humin/sugon/ske-chart/kyverno \
+  -f /Users/humin/sugon/ske-chart/kyverno/values.yaml \
+  -f /Users/humin/sugon/ske-chart/kyverno/values-storuser1.yaml \
+  -f /Users/humin/sugon/ske-chart/kyverno/values-sugon-sg1.yaml \
+  --context <ctx> -n ske
+```
+
+
+
 ## 8. 专项 Skill 入口
 
 - ResourceGroup：`~/agent/resourcegroup/SKILL.md`
