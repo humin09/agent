@@ -13,7 +13,7 @@ import json
 from datetime import datetime
 from collections import defaultdict
 
-MINIO_ALIAS = "xaminio"
+MINIO_ALIAS = "xa"
 BUCKET = "gitlab-lfs-prod"
 MC = os.path.expanduser("~/mc")
 

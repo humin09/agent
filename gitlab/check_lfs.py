@@ -17,7 +17,7 @@ import requests
 
 requests.packages.urllib3.disable_warnings()
 
-MINIO_ALIAS = "xaminio"
+MINIO_ALIAS = "xa"
 BUCKET = "gitlab-lfs-prod"
 MC = os.environ.get("MC", "mc")
 

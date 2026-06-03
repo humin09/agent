@@ -34,11 +34,11 @@ targets: ["*"]
 
 | mc 别名 | 区域 | 说明 |
 |---------|------|------|
-| xaminio | 西安（主集群） | 数据源头 |
-| ksminio | 昆山 | 子集群 |
-| qdminio | 青岛 | 子集群 |
-| dzminio | 达州 | 子集群 |
-| zzminio | 郑州 | 子集群 |
+| xa | 西安（主集群） | 数据源头 |
+| ks | 昆山 | 子集群 |
+| qd | 青岛 | 子集群 |
+| dz | 达州 | 子集群 |
+| zz | 郑州 | 子集群 |
 
 > 子集群节点查找：`kubectl get nodes -l minio=true` 配合对应区域 context，然后用 node shell 登录。
 
@@ -102,13 +102,13 @@ systemctl status minio
 
 ```bash
 # 列出主集群 LFS 桶内容
-mc ls xaminio/gitlab-lfs-prod/
+mc ls xa/gitlab-lfs-prod/
 
 # 查看桶信息
-mc stat xaminio/gitlab-lfs-prod
+mc stat xa/gitlab-lfs-prod
 
 # 查看某个 LFS 对象（已知 OID）
-mc cat xaminio/gitlab-lfs-prod/a1/b2/c3d4e5f6...
+mc cat xa/gitlab-lfs-prod/a1/b2/c3d4e5f6...
 ```
 
 ### 4.4 从主集群同步 LFS 数据到子集群
@@ -117,19 +117,19 @@ mc cat xaminio/gitlab-lfs-prod/a1/b2/c3d4e5f6...
 
 ```bash
 # 同步整个 LFS 桶到昆山
-mc mirror xaminio/gitlab-lfs-prod ksminio/gitlab-lfs-prod
+mc mirror xa/gitlab-lfs-prod ks/gitlab-lfs-prod
 
 # 同步到青岛
-mc mirror xaminio/gitlab-lfs-prod qdminio/gitlab-lfs-prod
+mc mirror xa/gitlab-lfs-prod qd/gitlab-lfs-prod
 
 # 同步到达州
-mc mirror xaminio/gitlab-lfs-prod dzminio/gitlab-lfs-prod
+mc mirror xa/gitlab-lfs-prod dz/gitlab-lfs-prod
 
 # 同步到郑州
-mc mirror xaminio/gitlab-lfs-prod zzminio/gitlab-lfs-prod
+mc mirror xa/gitlab-lfs-prod zz/gitlab-lfs-prod
 
 # 只同步特定前缀（如某个 OID 前缀）
-mc mirror xaminio/gitlab-lfs-prod/a1/ ksminio/gitlab-lfs-prod/a1/
+mc mirror xa/gitlab-lfs-prod/a1/ ks/gitlab-lfs-prod/a1/
 ```
 
 **在子集群节点上通过公网回源同步**（当本地 mc 无法直连时）：
@@ -159,18 +159,18 @@ sha256sum <file>
 # OID=a1b2c3d4... → gitlab-lfs-prod/a1/b2/c3d4...
 
 # 验证对象是否存在
-mc stat xaminio/gitlab-lfs-prod/a1/b2/c3d4...
+mc stat xa/gitlab-lfs-prod/a1/b2/c3d4...
 ```
 
 ### 4.6 检查子集群 LFS 缓存命中情况
 
 ```bash
 # 对比主集群和子集群的对象数量
-mc ls --summarize xaminio/gitlab-lfs-prod/ | tail -1
-mc ls --summarize ksminio/gitlab-lfs-prod/ | tail -1
+mc ls --summarize xa/gitlab-lfs-prod/ | tail -1
+mc ls --summarize ks/gitlab-lfs-prod/ | tail -1
 
 # 查找主集群有但子集群缺失的对象
-mc diff xaminio/gitlab-lfs-prod ksminio/gitlab-lfs-prod
+mc diff xa/gitlab-lfs-prod ks/gitlab-lfs-prod
 ```
 
 ### 4.7 GitLab API 常用操作

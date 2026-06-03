@@ -18,7 +18,7 @@
   # dry-run 仅检查不上传
   python3 /tmp/upload_lfs.py --dry-run /path/to/model
 
-执行环境: xa-login（需要 ~/mc 已配置 xaminio 别名）
+执行环境: xa-login（需要 ~/mc 已配置 xa 别名）
 固定路径: /tmp/upload_lfs.py
 """
 
@@ -30,7 +30,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
-MINIO_ALIAS = "xaminio"
+MINIO_ALIAS = "xa"
 BUCKET = "gitlab-lfs-prod"
 MC = os.path.expanduser("~/mc")
 

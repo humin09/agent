@@ -702,7 +702,7 @@ def save_results(result_log: str, payload: dict[str, Any]) -> None:
 def get_region_from_host(host):
     region_map = {
         "ksai.scnet.cn": "昆山",
-        "zzai2.scnet.cn": "郑州",
+        "zzai.scnet.cn": "郑州",
         "zzai.scnet.ai": "纽约",
         "dzai.scnet.cn": "达州",
         "qdai.scnet.cn": "青岛",

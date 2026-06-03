@@ -37,7 +37,7 @@ targets: ["*"]
   - `/v1/embeddings` 使用 embedding 请求体
   - `/v1/images/generations` 使用 image 请求体
 - 公网 URL 规则：
-  - `zz`: `http://<host>.zzai2.scnet.cn:58000<path>`
+  - `zz`: `http://<host>.zzai.scnet.cn:58000<path>`
   - `ks`: `http://<host>.ksai.scnet.cn:58000<path>`
 - 做压测、性能对比或异常分析时，指标口径优先参考 Grafana `maas` 面板。
 

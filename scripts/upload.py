@@ -10,15 +10,15 @@ import re
 
 PROTECTED_REMOTE_DIRS = ("/public", "/work", "/data")
 MINIO_BUCKET = "tmp"
-LOCAL_MINIO_ALIAS = "k8s-scp-local"
+LOCAL_MINIO_ALIAS = "ks"
 AUTO_MINIO_THRESHOLD_BYTES = 100 * 1024 * 1024
 MINIO_ENDPOINTS = {
-    "ks": "http://minio.ksai.scnet.cn:9000",
-    "qd": "http://minio.qdai.scnet.cn:9000",
-    "dz": "http://minio.dzai.scnet.cn:9000",
-    "zz": "http://minio.zzai2.scnet.cn:9000",
-    "wh": "http://minio.whai.scnet.cn:9000",
-    "sz": "http://minio.szai.scnet.cn:9000",
+    "ks": "http://oss.ksai.scnet.cn:9000",
+    "qd": "http://oss.qdai.scnet.cn:9000",
+    "dz": "http://oss.dzai.scnet.cn:9000",
+    "zz": "http://oss.zzai.scnet.cn:9000",
+    "wh": "http://oss.whai.scnet.cn:9000",
+    "sz": "http://oss.szai.scnet.cn:9000",
 }
 MINIO_ACCESS_KEY = "admin"
 MINIO_SECRET_KEY = "SugonMinio2024_pro"

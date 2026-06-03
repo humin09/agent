@@ -36,7 +36,7 @@ STATE_STABLE_READS = 2
 CLUSTER_VM_URLS = {
     "ks": "https://vm.ksai.scnet.cn:58043/select/0/prometheus",
     "dz": "https://vm.dzai.scnet.cn:58043/select/0/prometheus",
-    "zz": "https://vm.zzai2.scnet.cn:58043/select/0/prometheus",
+    "zz": "https://vm.zzai.scnet.cn:58043/select/0/prometheus",
     "qd": "https://vm.qdai.scnet.cn:58043/select/0/prometheus",
 }
 

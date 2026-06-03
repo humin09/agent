@@ -20,7 +20,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 CLUSTER_VL_URLS = {
     "ks": "https://vl.ksai.scnet.cn:58043",
-    "zz": "https://vl.zzai2.scnet.cn:58043",
+    "zz": "https://vl.zzai.scnet.cn:58043",
     "dz": "https://vl.dzai.scnet.cn:58043",
     "qd": "https://vl.qdai.scnet.cn:58043",
     "sz": "https://vl.szai.scnet.cn:58043",
