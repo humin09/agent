@@ -131,7 +131,7 @@ globs: ["**/*"]
 | 城市 | HTTPS 模板 |
 |---|---|
 | 昆山 | `https://<app>.ksai.scnet.cn:58043` |
-| 郑州 | `https://<app>.zzai2.scnet.cn:58043` |
+| 郑州 | `https://<app>.zzai.scnet.cn:58043` |
 | 达州 | `https://<app>.dzai.scnet.cn:58043` |
 | 青岛 | `https://<app>.qdai.scnet.cn:58043` |
 | 深圳 | `https://<app>.szai.scnet.cn:58043` |

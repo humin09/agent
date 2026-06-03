@@ -428,7 +428,7 @@ curl -X POST 'http://qwen3-235b-a22b.zzai.scnet.ai:58000/v1/responses' \
 **模型信息**
 
 - 模型名称: minimax-m25-int8-vip
-- base_url: http://minimax-m25-int8-vip.zzai2.scnet.cn:58000
+- base_url: http://minimax-m25-int8-vip.zzai.scnet.cn:58000
 - model_id: /models/MiniMax-M2.5-W8A8
 - 模型最大上下文长度: 196608
 - 副本数: 50/33
@@ -443,7 +443,7 @@ curl -X POST 'http://qwen3-235b-a22b.zzai.scnet.ai:58000/v1/responses' \
 
 请求示例:
 ```bash
-curl -X POST 'http://minimax-m25-int8-vip.zzai2.scnet.cn:58000/v1/chat/completions' \
+curl -X POST 'http://minimax-m25-int8-vip.zzai.scnet.cn:58000/v1/chat/completions' \
   -H 'Content-Type: application/json' \
   -d '{
     "model": "/models/MiniMax-M2.5-W8A8",
@@ -454,7 +454,7 @@ curl -X POST 'http://minimax-m25-int8-vip.zzai2.scnet.cn:58000/v1/chat/completio
 ```
 OpenAI Responses 示例:
 ```bash
-curl -X POST 'http://minimax-m25-int8-vip.zzai2.scnet.cn:58000/v1/responses' \
+curl -X POST 'http://minimax-m25-int8-vip.zzai.scnet.cn:58000/v1/responses' \
   -H 'Content-Type: application/json' \
   -d '{
     "model": "/models/MiniMax-M2.5-W8A8",
@@ -467,7 +467,7 @@ curl -X POST 'http://minimax-m25-int8-vip.zzai2.scnet.cn:58000/v1/responses' \
 **模型信息**
 
 - 模型名称: qwen35-122b-a10
-- base_url: http://qwen35-122b-a10.zzai2.scnet.cn:58000
+- base_url: http://qwen35-122b-a10.zzai.scnet.cn:58000
 - model_id: Qwen3.5-122B-A10B
 - 模型最大上下文长度: 65536
 - 副本数: 1/1
@@ -482,7 +482,7 @@ curl -X POST 'http://minimax-m25-int8-vip.zzai2.scnet.cn:58000/v1/responses' \
 
 请求示例:
 ```bash
-curl -X POST 'http://qwen35-122b-a10.zzai2.scnet.cn:58000/v1/chat/completions' \
+curl -X POST 'http://qwen35-122b-a10.zzai.scnet.cn:58000/v1/chat/completions' \
   -H 'Content-Type: application/json' \
   -d '{
     "model": "Qwen3.5-122B-A10B",
@@ -496,7 +496,7 @@ curl -X POST 'http://qwen35-122b-a10.zzai2.scnet.cn:58000/v1/chat/completions' \
 **模型信息**
 
 - 模型名称: qwen36-27b-test
-- base_url: http://qwen36-27b-test.zzai2.scnet.cn:58000
+- base_url: http://qwen36-27b-test.zzai.scnet.cn:58000
 - model_id: Qwen3.6-27B
 - 模型最大上下文长度: 262144
 - 副本数: 1/1
@@ -511,7 +511,7 @@ curl -X POST 'http://qwen35-122b-a10.zzai2.scnet.cn:58000/v1/chat/completions' \
 
 请求示例:
 ```bash
-curl -X POST 'http://qwen36-27b-test.zzai2.scnet.cn:58000/v1/chat/completions' \
+curl -X POST 'http://qwen36-27b-test.zzai.scnet.cn:58000/v1/chat/completions' \
   -H 'Content-Type: application/json' \
   -d '{
     "model": "Qwen3.6-27B",
@@ -522,7 +522,7 @@ curl -X POST 'http://qwen36-27b-test.zzai2.scnet.cn:58000/v1/chat/completions' \
 ```
 OpenAI Responses 示例:
 ```bash
-curl -X POST 'http://qwen36-27b-test.zzai2.scnet.cn:58000/v1/responses' \
+curl -X POST 'http://qwen36-27b-test.zzai.scnet.cn:58000/v1/responses' \
   -H 'Content-Type: application/json' \
   -d '{
     "model": "Qwen3.6-27B",
