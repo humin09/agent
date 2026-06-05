@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
-import hashlib
+
 import subprocess
 import sys
 import time
@@ -149,16 +149,10 @@ def read_state_stable(
     delay: float = STATE_READ_RETRY_DELAY,
     stable_reads: int = STATE_STABLE_READS,
 ) -> tuple[dict, bool]:
-    """读取状态文件，要求连续读取到一致且可解析的 JSON 才算稳定。"""
-    last_state: dict = {}
-    last_digest: str | None = None
-    consecutive_same = 0
-
+    """读取状态文件，能解析为合法 JSON 即视为稳定。"""
     for attempt in range(1, retries + 1):
         raw = read_state_raw(ctx, pod)
         if not raw.strip():
-            consecutive_same = 0
-            last_digest = None
             if attempt < retries:
                 time.sleep(delay)
             continue
@@ -166,26 +160,12 @@ def read_state_stable(
         try:
             state = json.loads(raw)
         except json.JSONDecodeError:
-            consecutive_same = 0
-            last_digest = None
             if attempt < retries:
                 time.sleep(delay)
             continue
 
-        digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
-        last_state = state
-        if digest == last_digest:
-            consecutive_same += 1
-        else:
-            consecutive_same = 1
-        last_digest = digest
-
-        if consecutive_same >= stable_reads:
-            return state, True
-
-        if attempt < retries:
-            time.sleep(delay)
-    return last_state, False
+        return state, True
+    return {}, False
 
 
 def collect_pod_snapshot(ctx: str, pod: str, node_ip: str) -> dict[str, Any]:
