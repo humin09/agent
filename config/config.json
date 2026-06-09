@@ -1,0 +1,19 @@
+{
+  "apps": [
+    {
+      "appId": "cli_aa8c657afe12dbef",
+      "appSecret": {
+        "source": "keychain",
+        "id": "appsecret:cli_aa8c657afe12dbef"
+      },
+      "brand": "feishu",
+      "lang": "zh",
+      "users": [
+        {
+          "userOpenId": "ou_8fbd8ce0f13682e1a04cb30af6779439",
+          "userName": "胡敏"
+        }
+      ]
+    }
+  ]
+}
