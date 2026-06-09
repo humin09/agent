@@ -143,26 +143,60 @@ HTTP 端口改为 `58000`.常见 app：`ingress`、`vm`、`vl`、模型服务名
 
 ## 6. 组件与配置仓库
 
-线上部署变更后，按组件定位本地配置并回写. 组件的功能和集群的差异性配置, 参考`/Users/humin/sugon/ske-chart/README.md`
+**仓库路径：** `/Users/humin/sugon/ske-chart`
+
+**组件详细介绍（single source of truth）：** `/Users/humin/sugon/ske-chart/README.md`
+
+⚠️ **路由规则：** 涉及 ske 平台组件时，必须先读取 `/Users/humin/sugon/ske-chart/README.md` 对应章节，禁止仅凭本文件推断组件细节.
+
+线上部署变更后，按下方表格定位本地配置并回写:
+- `dnsmasq-client` | `ske` | `/Users/humin/sugon/ske-chart/dnsmasq-client`
+- `dnsmasq-server` | `ske` | `/Users/humin/sugon/ske-chart/dnsmasq-server`
+- `keda` | `ske` | `/Users/humin/sugon/ske-chart/keda`
+- `victoria-logs` | `ske` | `/Users/humin/sugon/ske-chart/victoria-logs`
+- `victoria-metrics` | `ske` | `/Users/humin/sugon/ske-chart/victoria-metrics`
+- `kyverno` | `ske` | `/Users/humin/sugon/ske-chart/kyverno`
+- `resource-operator` | `ske` | `/Users/humin/sugon/ske-chart/resource-operator`
+- `notebook-controller` | `ske` | `/Users/humin/sugon/ske-chart/notebook-controller`
+- `multipoint-scheduler` | `ske` | `/Users/humin/sugon/ske-chart/multipoint-scheduler`
+- `volcano` | `volcano-system` | `/Users/humin/sugon/ske-chart/volcano`
+- `kubesphere` | `kubesphere-system` | `/Users/humin/sugon/ske-chart/kubesphere`
+- `minio-client` | `ske` | `/Users/humin/sugon/ske-chart/minio-client`
+- `minio-server` | `ske` | `/Users/humin/sugon/ske-chart/minio-server`
+- `alert` | `ske` | `/Users/humin/sugon/ske-chart/alert`
+- `ex-lb` | 节点部署 | `/Users/humin/sugon/ske-chart/ex-lb`
+- `http-proxy` | `ske` + `ske-model` | `/Users/humin/sugon/ske-chart/http-proxy`
+- `maas` | `ske-model` | `/Users/humin/sugon/ske-chart/maas`
+- `npu-device-plugin` | `ske` | `/Users/humin/sugon/ske-chart/npu-device-plugin`
+- `resourcegroups` | `kube-system` | `/Users/humin/sugon/ske-chart/resourcegroups`
+- `servicemonitor` | `ske` | `/Users/humin/sugon/ske-chart/servicemonitor`
+
+线上部署变更后，按下方表格定位本地配置并回写:
 
 | 组件 | namespace | 本地路径 |
 |---|---|---|
 | `ingress` | `ske` | `/Users/humin/sugon/ske-chart/nginx-ingress-controller` |
 | `admission-controller` | `ske` | `/Users/humin/sugon/ske-chart/admission-controller` |
-| `dnsmasq` | `ske` | `/Users/humin/sugon/ske-chart/dnsmasq` |
+| `dnsmasq-client` | `ske` | `/Users/humin/sugon/ske-chart/dnsmasq-client` |
+| `dnsmasq-server` | `ske` | `/Users/humin/sugon/ske-chart/dnsmasq-server` |
 | `keda` | `ske` | `/Users/humin/sugon/ske-chart/keda` |
 | `victoria-logs` | `ske` | `/Users/humin/sugon/ske-chart/victoria-logs` |
 | `victoria-metrics` | `ske` | `/Users/humin/sugon/ske-chart/victoria-metrics` |
-| `velero` | `ske` | `/Users/humin/sugon/ske-chart/velero` |
 | `kyverno` | `ske` | `/Users/humin/sugon/ske-chart/kyverno` |
 | `resource-operator` | `ske` | `/Users/humin/sugon/ske-chart/resource-operator` |
 | `notebook-controller` | `ske` | `/Users/humin/sugon/ske-chart/notebook-controller` |
 | `multipoint-scheduler` | `ske` | `/Users/humin/sugon/ske-chart/multipoint-scheduler` |
 | `volcano` | `volcano-system` | `/Users/humin/sugon/ske-chart/volcano` |
 | `kubesphere` | `kubesphere-system` | `/Users/humin/sugon/ske-chart/kubesphere` |
-| `minio-client` | `ske` | `/Users/humin/sugon/ske-chart/minio/client` |
-| `minio-server` | `ske` | `/Users/humin/sugon/ske-chart/minio/server` |
-| MAAS 模型 YAML | `ske-model` | `/Users/humin/sugon/ske-chart/maas` |
+| `minio-client` | `ske` | `/Users/humin/sugon/ske-chart/minio-client` |
+| `minio-server` | `ske` | `/Users/humin/sugon/ske-chart/minio-server` |
+| `alert` | `ske` | `/Users/humin/sugon/ske-chart/alert` |
+| `ex-lb` | 节点部署 | `/Users/humin/sugon/ske-chart/ex-lb` |
+| `http-proxy` | `ske` + `ske-model` | `/Users/humin/sugon/ske-chart/http-proxy` |
+| `maas` | `ske-model` | `/Users/humin/sugon/ske-chart/maas` |
+| `npu-device-plugin` | `ske` | `/Users/humin/sugon/ske-chart/npu-device-plugin` |
+| `resourcegroups` | `kube-system` | `/Users/humin/sugon/ske-chart/resourcegroups` |
+| `servicemonitor` | `ske` | `/Users/humin/sugon/ske-chart/servicemonitor` |
 
 ## 7. 任务路由
 
