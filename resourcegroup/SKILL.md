@@ -1,6 +1,6 @@
 ---
 name: k8s-resourcegroup
-description: "K8s ResourceGroup 子专题：资源组识别、节点映射与容量定位"
+description: "K8s ResourceGroup 子专题：资源组识别、节点映射、容量定位与节点迁移（通过 patch CR 的 spec.nodeNames 操作）"
 targets: ["*"]
 ---
 
@@ -49,16 +49,68 @@ kubectl --context=<别名> get node -l groupId=<GROUPID>
 - 同步核对节点是否已打 `resourceGroup/groupId` 标签。
 - 若标签也为空，判定“未启用 ResourceGroup 管理模式”或“尚未初始化资源组数据”。
 
-## 3) 变更类命令（需确认）
+## 3) CR 关键字段速查
 
-以下命令属于变更操作，执行前必须给主人确认（`<namespace>` 固定为 `kube-system`）：
+| 字段路径 | 说明 |
+|---|---|
+| `spec.nodeNames` | 节点名列表，增删节点的核心字段 |
+| `spec.labels` | 写入节点 label 的模板（含 `groupId`、`resourceGroup`、`serviceType`） |
+| `spec.namespaces` | 空数组=共享资源组；非空=仅这些 namespace 可用 |
+| `spec.hard` | 每卡 CPU/内存配额上限 |
+| `status.nodeInfo.cardType` | 卡类型：`dcu` / `gpu`，无则为 `cpu` |
+| `status.nodes` | 各节点容量、已用、状态、入组时间 |
+| `status.freeCards` / `totalCards` | 资源组空闲/总量卡数 |
+
+## 4) 节点迁移（重要）
+
+**原则：通过 patch `ResourceGroup` CR 的 `spec.nodeNames` 来变更节点归属，禁止直接修改节点 label/annotation。**
+
+`resource-operator` 会持续监听 CR 变更，并自动将 `spec.labels` 同步到节点的 label 和 `volcano.sh/resource-group` annotation 上。直接打 label 会被 operator 回滚。
+
+### 迁移步骤
+
+假设要将节点从资源组 A 迁到资源组 B：
+
+**4.1** 先查当前两个资源组的 `spec.nodeNames`：
+```bash
+kubectl --context=<别名> -n kube-system get resourcegroup <RG_B> -o jsonpath='{.spec.nodeNames}'
+kubectl --context=<别名> -n kube-system get resourcegroup <RG_A> -o jsonpath='{.spec.nodeNames}'
+```
+
+**4.2** patch 目标资源组 B，追加节点名：
+```bash
+kubectl --context=<别名> -n kube-system patch resourcegroup <RG_B> \
+  --type=merge -p '{"spec":{"nodeNames":["...原列表...","<新节点IP>"]}}'
+```
+
+**4.3** patch 原资源组 A，移除节点名：
+```bash
+kubectl --context=<别名> -n kube-system patch resourcegroup <RG_A> \
+  --type=merge -p '{"spec":{"nodeNames":["...移除目标节点后的列表..."]}}'
+```
+
+**4.4** 等待 5~10 秒，验证节点 label 已同步：
+```bash
+sleep 5 && kubectl --context=<别名> get node <IP> -o jsonpath='groupId={.metadata.labels.groupId} resourceGroup={.metadata.labels.resourceGroup} volcano={.metadata.annotations.volcano\.sh/resource-group}'
+```
+
+### 确认模板
+
+按 AGENTS.md §4 格式输出：
+```
+准备执行变更命令：kubectl --context <ctx> -n kube-system patch resourcegroup <RG_B> ...
+影响范围：
+- context: <ctx>
+- resource: resourcegroup/<RG_B>, resourcegroup/<RG_A>
+- expected impact: <节点列表> 迁入 <RG_B>，<节点> 从 <RG_A> 迁出
+- rollback: 还原两个 CR 的 spec.nodeNames 到原始值
+```
+
+## 5) 变更类命令（需确认）
+
+以下命令属于变更操作，执行前必须按确认模板输出并等待主人确认（`<namespace>` 固定为 `kube-system`）：
 ```bash
 kubectl --context=<别名> -n kube-system edit resourcegroup <NAME>
 kubectl --context=<别名> -n kube-system apply -f <resourcegroup.yaml>
 kubectl --context=<别名> -n kube-system patch resourcegroup <NAME> --type merge -p '<json>'
 ```
-
-执行前必须给出：
-- 目标集群/资源组名
-- 具体变更字段（如 `nodeNames`、`namespaces`）
-- 影响范围与回滚方案
