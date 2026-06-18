@@ -1,0 +1,93 @@
+#!/usr/bin/expect -f
+# tx.exp — TX 集群 SSH 登录器
+# 用法:
+#   expect ~/agent/scripts/tx.exp [cmd]      单次执行,默认 kubectl get node
+#   expect ~/agent/scripts/tx.exp --live     交互模式,留在 txk8s01 shell (配合 tmux 使用)
+
+set timeout 60
+log_user 1
+
+set cmd ""
+set live 0
+
+foreach a $argv {
+    if {$a eq "--live" || $a eq "-l"} {
+        set live 1
+    } else {
+        set cmd $a
+    }
+}
+if {$cmd eq "" && $live == 0} {
+    set cmd "kubectl get node"
+}
+
+spawn ssh -o StrictHostKeyChecking=no HPC_humin@js.ks.sugon.work -p 2222
+
+if {$live == 1} {
+    log_file -a /tmp/tx_session.log
+}
+
+expect "Opt>"
+sleep 1
+send "g\r"
+
+expect "Opt>"
+sleep 1
+send "g21\r"
+
+expect "Search:"
+sleep 1
+send "1\r"
+
+expect {
+    "assword:" { send "9sK&p7zF2v\r" }
+    "connections" { sleep 2 }
+    "Last login" { }
+    timeout {
+        puts "TIMEOUT waiting for tx-admin01"
+        exit 1
+    }
+}
+
+expect -re {\[.*\]|.*#|.*\$|Last login}
+sleep 2
+
+send "ssh -o StrictHostKeyChecking=no -p 36000 root@10.233.0.1\r"
+
+expect {
+    "assword:" {
+        puts "ERROR: password required for txk8s01 (SSH key broken)"
+        exit 1
+    }
+    -re {#|\$|root@|@.*:|~#} {
+        sleep 1
+    }
+    timeout {
+        puts "TIMEOUT waiting for txk8s01 shell"
+        exit 1
+    }
+}
+
+if {$live == 1} {
+    puts "\n=== TX LIVE SESSION READY ==="
+    interact
+    exit 0
+}
+
+set marker "___TXDONE_[expr {int(rand()*99999)}]___"
+send -- "$cmd; echo $marker\r"
+expect {
+    $marker { }
+    timeout {
+        puts "TIMEOUT waiting for command output"
+    }
+}
+sleep 1
+send "exit\r"
+expect {
+    "closed" { }
+    eof { }
+    timeout { }
+}
+catch {close}
+catch {wait}

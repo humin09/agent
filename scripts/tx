@@ -1,0 +1,79 @@
+#!/bin/bash
+# tx — TX 集群持久会话管理
+# 用法:
+#   tx                  启动持久会话 (screen session "tx")
+#   tx <cmd>            在持久会话中执行命令
+#   tx -k               关闭持久会话
+#   tx --one-shot <cmd> 单次执行 (等同 expect ~/agent/scripts/tx.exp <cmd>)
+
+SESSION="tx"
+SCRIPT="$HOME/agent/scripts/tx.exp"
+LOGFILE="/tmp/tx_session.log"
+
+_tx_in_session() {
+  screen -S "$SESSION" -p 0 -X stuff "$*"
+  sleep 0.2
+  screen -S "$SESSION" -p 0 -X stuff $'\x0d'
+}
+
+_tx_capture() {
+  tail -200 "$LOGFILE" 2>/dev/null
+}
+
+case "${1:-}" in
+  -k|--kill|--stop|stop)
+    screen -S "$SESSION" -X quit 2>/dev/null && echo "session $SESSION closed" || echo "session not running"
+    rm -f "$LOGFILE"
+    exit 0
+    ;;
+  --one-shot)
+    shift
+    expect "$SCRIPT" "$*"
+    exit $?
+    ;;
+  --status|-s)
+    if screen -list 2>/dev/null | grep -q "${SESSION}"; then
+      echo "running"
+    else
+      echo "not running"
+    fi
+    exit 0
+    ;;
+  "")
+    if screen -list 2>/dev/null | grep -q "${SESSION}"; then
+      echo "session already running"
+      _tx_capture
+      exit 0
+    fi
+    echo "starting $SESSION ..."
+    : > "$LOGFILE"
+    screen -dmS "$SESSION" expect "$SCRIPT" --live
+    echo "waiting for SSH chain ..."
+    for i in $(seq 1 30); do
+      sleep 2
+      if grep -qE "LIVE SESSION READY|txk8s01" "$LOGFILE" 2>/dev/null; then
+        echo "session ready"
+        _tx_capture | tail -20
+        exit 0
+      fi
+    done
+    echo "timeout waiting for session"
+    _tx_capture
+    exit 1
+    ;;
+  *)
+    if ! screen -list 2>/dev/null | grep -q "${SESSION}"; then
+      echo "session not running, starting ..."
+      "$0"
+    fi
+    marker="___TXEND_$$_$(date +%s)___"
+    _tx_in_session "$*; echo $marker"
+    for i in $(seq 1 30); do
+      sleep 1
+      if grep -q "$marker" "$LOGFILE" 2>/dev/null; then
+        break
+      fi
+    done
+    sed -n "/$marker\$/q;p" "$LOGFILE" 2>/dev/null | tail -100 | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g; s/\r//g'
+    ;;
+esac

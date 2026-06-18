@@ -68,7 +68,7 @@ globs: ["**/*"]
 
 ## 3. K8s 硬约束
 
-- 所有 `kubectl` 命令必须显式带 `--context <ctx>`.
+- 所有 `kubectl` 命令必须显式带 `--context <ctx>`（tx 集群除外）.
 - 需要命名空间时，必须显式带 `-n <namespace>`.
 - 禁止使用 `kubectl config use-context` 和 `kubectl config set-context` 修改全局上下文.
 - 禁止直接 SSH 到集群节点.
@@ -364,6 +364,24 @@ helm install kyverno-template ~/sugon/ske-chart/kyverno \
 ```
 
 
+
+### 7.9 tx 集群
+
+腾讯集群通过 SSH 链路访问，不使用本地 kubeconfig.
+
+- 持久模式 (推荐,首次 ~20s,后续 ~1-3s):
+  ```bash
+  ~/agent/scripts/tx                          # 启动
+  ~/agent/scripts/tx "kubectl get pod"        # 执行
+  ~/agent/scripts/tx -k                       # 关闭
+  ```
+
+- 单次模式 (~18s):
+  ```bash
+  expect ~/agent/scripts/tx.exp "kubectl get pod"
+  ```
+
+注意：tx 集群的 kubectl 命令**不需要** `--context` 参数.
 
 ## 8. 专项 Skill 入口
 
