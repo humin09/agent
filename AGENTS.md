@@ -25,7 +25,6 @@ globs: ["**/*"]
 - Python 包管理与执行统一使用 `uv`，禁止直接使用 `pip`.
 - 网页检索或浏览器自动化优先使用 Chrome.
 - 本地文档优先 Markdown；远端文档优先用 `lark-cli` 生成飞书文档.
-- 查 Codex 额度：`python ~/agent/scripts/codex_quota.py`.
 - 更新技能：`python ~/agent/scripts/skill_update.py`.
 
 ## 2. 高风险操作必须确认
@@ -144,60 +143,60 @@ HTTP 端口改为 `58000`.常见 app：`ingress`、`vm`、`vl`、模型服务名
 
 ## 6. 组件与配置仓库
 
-**仓库路径：** `/Users/humin/sugon/ske-chart`
+**仓库路径：** `~/sugon/ske-chart`
 
-**组件详细介绍（single source of truth）：** `/Users/humin/sugon/ske-chart/README.md`
+**组件详细介绍（single source of truth）：** `~/sugon/ske-chart/README.md`
 
-⚠️ **路由规则：** 涉及 ske 平台组件时，必须先读取 `/Users/humin/sugon/ske-chart/README.md` 对应章节，禁止仅凭本文件推断组件细节.
+⚠️ **路由规则：** 涉及 ske 平台组件时，必须先读取 `~/sugon/ske-chart/README.md` 对应章节，禁止仅凭本文件推断组件细节.
 
 线上部署变更后，按下方表格定位本地配置并回写:
-- `dnsmasq-client` | `ske` | `/Users/humin/sugon/ske-chart/dnsmasq-client`
-- `dnsmasq-server` | `ske` | `/Users/humin/sugon/ske-chart/dnsmasq-server`
-- `keda` | `ske` | `/Users/humin/sugon/ske-chart/keda`
-- `victoria-logs` | `ske` | `/Users/humin/sugon/ske-chart/victoria-logs`
-- `victoria-metrics` | `ske` | `/Users/humin/sugon/ske-chart/victoria-metrics`
-- `kyverno` | `ske` | `/Users/humin/sugon/ske-chart/kyverno`
-- `resource-operator` | `ske` | `/Users/humin/sugon/ske-chart/resource-operator`
-- `notebook-controller` | `ske` | `/Users/humin/sugon/ske-chart/notebook-controller`
-- `multipoint-scheduler` | `ske` | `/Users/humin/sugon/ske-chart/multipoint-scheduler`
-- `volcano` | `volcano-system` | `/Users/humin/sugon/ske-chart/volcano`
-- `kubesphere` | `kubesphere-system` | `/Users/humin/sugon/ske-chart/kubesphere`
-- `minio-client` | `ske` | `/Users/humin/sugon/ske-chart/minio-client`
-- `minio-server` | `ske` | `/Users/humin/sugon/ske-chart/minio-server`
-- `alert` | `ske` | `/Users/humin/sugon/ske-chart/alert`
-- `ex-lb` | 节点部署 | `/Users/humin/sugon/ske-chart/ex-lb`
-- `http-proxy` | `ske` + `ske-model` | `/Users/humin/sugon/ske-chart/http-proxy`
-- `maas` | `ske-model` | `/Users/humin/sugon/ske-chart/maas`
-- `npu-device-plugin` | `ske` | `/Users/humin/sugon/ske-chart/npu-device-plugin`
-- `resourcegroups` | `kube-system` | `/Users/humin/sugon/ske-chart/resourcegroups`
-- `servicemonitor` | `ske` | `/Users/humin/sugon/ske-chart/servicemonitor`
+- `dnsmasq-client` | `ske` | `~/sugon/ske-chart/dnsmasq-client`
+- `dnsmasq-server` | `ske` | `~/sugon/ske-chart/dnsmasq-server`
+- `keda` | `ske` | `~/sugon/ske-chart/keda`
+- `victoria-logs` | `ske` | `~/sugon/ske-chart/victoria-logs`
+- `victoria-metrics` | `ske` | `~/sugon/ske-chart/victoria-metrics`
+- `kyverno` | `ske` | `~/sugon/ske-chart/kyverno`
+- `resource-operator` | `ske` | `~/sugon/ske-chart/resource-operator`
+- `notebook-controller` | `ske` | `~/sugon/ske-chart/notebook-controller`
+- `multipoint-scheduler` | `ske` | `~/sugon/ske-chart/multipoint-scheduler`
+- `volcano` | `volcano-system` | `~/sugon/ske-chart/volcano`
+- `kubesphere` | `kubesphere-system` | `~/sugon/ske-chart/kubesphere`
+- `minio-client` | `ske` | `~/sugon/ske-chart/minio-client`
+- `minio-server` | `ske` | `~/sugon/ske-chart/minio-server`
+- `alert` | `ske` | `~/sugon/ske-chart/alert`
+- `ex-lb` | 节点部署 | `~/sugon/ske-chart/ex-lb`
+- `http-proxy` | `ske` + `ske-model` | `~/sugon/ske-chart/http-proxy`
+- `maas` | `ske-model` | `~/sugon/ske-chart/maas`
+- `npu-device-plugin` | `ske` | `~/sugon/ske-chart/npu-device-plugin`
+- `resourcegroups` | `kube-system` | `~/sugon/ske-chart/resourcegroups`
+- `servicemonitor` | `ske` | `~/sugon/ske-chart/servicemonitor`
 
 线上部署变更后，按下方表格定位本地配置并回写:
 
 | 组件 | namespace | 本地路径 |
 |---|---|---|
-| `ingress` | `ske` | `/Users/humin/sugon/ske-chart/nginx-ingress-controller` |
-| `admission-controller` | `ske` | `/Users/humin/sugon/ske-chart/admission-controller` |
-| `dnsmasq-client` | `ske` | `/Users/humin/sugon/ske-chart/dnsmasq-client` |
-| `dnsmasq-server` | `ske` | `/Users/humin/sugon/ske-chart/dnsmasq-server` |
-| `keda` | `ske` | `/Users/humin/sugon/ske-chart/keda` |
-| `victoria-logs` | `ske` | `/Users/humin/sugon/ske-chart/victoria-logs` |
-| `victoria-metrics` | `ske` | `/Users/humin/sugon/ske-chart/victoria-metrics` |
-| `kyverno` | `ske` | `/Users/humin/sugon/ske-chart/kyverno` |
-| `resource-operator` | `ske` | `/Users/humin/sugon/ske-chart/resource-operator` |
-| `notebook-controller` | `ske` | `/Users/humin/sugon/ske-chart/notebook-controller` |
-| `multipoint-scheduler` | `ske` | `/Users/humin/sugon/ske-chart/multipoint-scheduler` |
-| `volcano` | `volcano-system` | `/Users/humin/sugon/ske-chart/volcano` |
-| `kubesphere` | `kubesphere-system` | `/Users/humin/sugon/ske-chart/kubesphere` |
-| `minio-client` | `ske` | `/Users/humin/sugon/ske-chart/minio-client` |
-| `minio-server` | `ske` | `/Users/humin/sugon/ske-chart/minio-server` |
-| `alert` | `ske` | `/Users/humin/sugon/ske-chart/alert` |
-| `ex-lb` | 节点部署 | `/Users/humin/sugon/ske-chart/ex-lb` |
-| `http-proxy` | `ske` + `ske-model` | `/Users/humin/sugon/ske-chart/http-proxy` |
-| `maas` | `ske-model` | `/Users/humin/sugon/ske-chart/maas` |
-| `npu-device-plugin` | `ske` | `/Users/humin/sugon/ske-chart/npu-device-plugin` |
-| `resourcegroups` | `kube-system` | `/Users/humin/sugon/ske-chart/resourcegroups` |
-| `servicemonitor` | `ske` | `/Users/humin/sugon/ske-chart/servicemonitor` |
+| `ingress` | `ske` | `~/sugon/ske-chart/nginx-ingress-controller` |
+| `admission-controller` | `ske` | `~/sugon/ske-chart/admission-controller` |
+| `dnsmasq-client` | `ske` | `~/sugon/ske-chart/dnsmasq-client` |
+| `dnsmasq-server` | `ske` | `~/sugon/ske-chart/dnsmasq-server` |
+| `keda` | `ske` | `~/sugon/ske-chart/keda` |
+| `victoria-logs` | `ske` | `~/sugon/ske-chart/victoria-logs` |
+| `victoria-metrics` | `ske` | `~/sugon/ske-chart/victoria-metrics` |
+| `kyverno` | `ske` | `~/sugon/ske-chart/kyverno` |
+| `resource-operator` | `ske` | `~/sugon/ske-chart/resource-operator` |
+| `notebook-controller` | `ske` | `~/sugon/ske-chart/notebook-controller` |
+| `multipoint-scheduler` | `ske` | `~/sugon/ske-chart/multipoint-scheduler` |
+| `volcano` | `volcano-system` | `~/sugon/ske-chart/volcano` |
+| `kubesphere` | `kubesphere-system` | `~/sugon/ske-chart/kubesphere` |
+| `minio-client` | `ske` | `~/sugon/ske-chart/minio-client` |
+| `minio-server` | `ske` | `~/sugon/ske-chart/minio-server` |
+| `alert` | `ske` | `~/sugon/ske-chart/alert` |
+| `ex-lb` | 节点部署 | `~/sugon/ske-chart/ex-lb` |
+| `http-proxy` | `ske` + `ske-model` | `~/sugon/ske-chart/http-proxy` |
+| `maas` | `ske-model` | `~/sugon/ske-chart/maas` |
+| `npu-device-plugin` | `ske` | `~/sugon/ske-chart/npu-device-plugin` |
+| `resourcegroups` | `kube-system` | `~/sugon/ske-chart/resourcegroups` |
+| `servicemonitor` | `ske` | `~/sugon/ske-chart/servicemonitor` |
 
 ## 7. 任务路由
 
@@ -301,7 +300,7 @@ NotReady 或已 Cordon 节点：先找 `kubeasz=true` 节点，再通过 `node-s
 
 - 扫描模型列表：`python ~/agent/scripts/probe_models.py`
 
-执行后同步更新 `/Users/humin/sugon/ske-chart/maas` 下的模型 YAML.
+执行后同步更新 `~/sugon/ske-chart/maas` 下的模型 YAML.
 
 ### 7.7 MinIO
 
@@ -316,7 +315,7 @@ NotReady 或已 Cordon 节点：先找 `kubeasz=true` 节点，再通过 `node-s
 
 Kyverno 策略通过 Helm template 化管理，支持按 namespace 灵活配置挂载白名单和资源组限制。
 
-**配置文件：** `/Users/humin/sugon/ske-chart/kyverno/values.yaml` 中的 `policies` 字段
+**配置文件：** `~/sugon/ske-chart/kyverno/values.yaml` 中的 `policies` 字段
 
 **三个参数：**
 
@@ -343,24 +342,24 @@ policies:
 
 **部署示例（storuser1）：**
 ```bash
-helm install kyverno-template /Users/humin/sugon/ske-chart/kyverno \
-  -f /Users/humin/sugon/ske-chart/kyverno/values-storuser1.yaml \
+helm install kyverno-template ~/sugon/ske-chart/kyverno \
+  -f ~/sugon/ske-chart/kyverno/values-storuser1.yaml \
   --context <ctx> -n ske
 ```
 
 **升级现有部署：**
 ```bash
-helm upgrade kyverno-template /Users/humin/sugon/ske-chart/kyverno \
-  -f /Users/humin/sugon/ske-chart/kyverno/values-storuser1.yaml \
+helm upgrade kyverno-template ~/sugon/ske-chart/kyverno \
+  -f ~/sugon/ske-chart/kyverno/values-storuser1.yaml \
   --context <ctx> -n ske
 ```
 
 **同时部署多个用户：**
 ```bash
-helm install kyverno-template /Users/humin/sugon/ske-chart/kyverno \
-  -f /Users/humin/sugon/ske-chart/kyverno/values.yaml \
-  -f /Users/humin/sugon/ske-chart/kyverno/values-storuser1.yaml \
-  -f /Users/humin/sugon/ske-chart/kyverno/values-sugon-sg1.yaml \
+helm install kyverno-template ~/sugon/ske-chart/kyverno \
+  -f ~/sugon/ske-chart/kyverno/values.yaml \
+  -f ~/sugon/ske-chart/kyverno/values-storuser1.yaml \
+  -f ~/sugon/ske-chart/kyverno/values-sugon-sg1.yaml \
   --context <ctx> -n ske
 ```
 

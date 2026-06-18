@@ -1,5 +1,9 @@
 {
-  "model": "haiku",
+  "model": "claude-opus-4-8",
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://api.scnet.cn/api/gw",
+    "ANTHROPIC_AUTH_TOKEN": "sk-sJTEJwZrVwZ7T5AIsjNwjw"
+  },
   "enabledPlugins": {
     "playwright@claude-plugins-official": true,
     "security-guidance@claude-plugins-official": true,

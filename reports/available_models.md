@@ -6,19 +6,35 @@
 | deepseek-7b | ✅ | ❌ | ❌ | 5/5 |
 | deepseek-r1-0528-8b | ✅ | ❌ | ❌ | 20/20 |
 | deepseek-r1-70b | ✅ | ❌ | ❌ | 3/3 |
-| deepseek-v4-flash | ✅ | ✅ | ✅ | 2/2 |
+| deepseek-v4-flash | ❌ | ❌ | ❌ | 0/0 |
 | deepseek-v4-pro | ✅ | ✅ | ✅ | 1/1 |
+| kimi-k26-gateway | ❌ | ❌ | ❌ | 1/1 |
+| kimi-k26-w4a16-smg-pd-decode-0 | ❌ | ❌ | ❌ | 1/0 |
+| kimi-k26-w4a16-smg-pd-decode-0-rank-1 | ❌ | ❌ | ❌ | 1/0 |
+| kimi-k26-w4a16-smg-pd-prefill-0 | ❌ | ❌ | ❌ | 1/0 |
+| kimi-k26-w4a16-smg-pd-prefill-0-rank-1 | ❌ | ❌ | ❌ | 1/0 |
+| kimi-k26-w4a16-smg-pd-prefill-1 | ❌ | ❌ | ❌ | 1/0 |
+| kimi-k26-w4a16-smg-pd-prefill-1-rank-1 | ❌ | ❌ | ❌ | 1/0 |
+| kimi-k26-w4a16-smg-pd-smg | ❌ | ❌ | ❌ | 1/1 |
+| kimi-k26-w4a16-tl-smg-pd-decode-0 | ❌ | ❌ | ❌ | 0/0 |
+| kimi-k26-w4a16-tl-smg-pd-decode-0-rank-1 | ❌ | ❌ | ❌ | 0/0 |
+| kimi-k26-w4a16-tl-smg-pd-prefill-0 | ❌ | ❌ | ❌ | 1/1 |
+| kimi-k26-w4a16-tl-smg-pd-prefill-0-rank-1 | ❌ | ❌ | ❌ | 1/1 |
+| kimi-k26-w4a16-tl-smg-pd-prefill-1 | ❌ | ❌ | ❌ | 0/0 |
+| kimi-k26-w4a16-tl-smg-pd-prefill-1-rank-1 | ❌ | ❌ | ❌ | 0/0 |
+| kimi-k26-w4a16-tl-smg-pd-smg | ❌ | ❌ | ❌ | 1/1 |
 | minimax-m25-int8 | ✅ | ✅ | ✅ | 1/1 |
-| minimax-m25-int8-vip | ✅ | ✅ | ✅ | 50/33 |
+| minimax-m25-int8-vip | ❌ | ❌ | ❌ | 0/0 |
+| minimax-m25-w8a8-test-2 | ❌ | ❌ | ❌ | 0/0 |
 | qwen3-235b-a22b | ✅ | ✅ | ✅ | 1/1 |
 | qwen3-30b | ✅ | ❌ | ❌ | 4/4 |
 | qwen3-embedding-8b | ✅ | ❌ | ❌ | 8/8 |
-| qwen35-122b-a10 | ✅ | ❌ | ✅ | 1/1 |
+| qwen35-122b-a10 | ❌ | ❌ | ❌ | 0/0 |
 | qwen36-27b | ❌ | ❌ | ❌ | 0/0 |
-| qwen36-27b-test | ✅ | ✅ | ✅ | 1/1 |
+| qwen36-27b-test | ❌ | ❌ | ❌ | 0/0 |
 | qwen36-35b-a3b | ✅ | ✅ | ✅ | 1/1 |
 | qwq-32b | ✅ | ❌ | ❌ | 11/11 |
-| ske-model-tool | ❌ | ❌ | ❌ | 1/1 |
+| sgl-model-gateway-svc | ❌ | ❌ | ❌ | 0/0 |
 
 ## 昆山
 
@@ -138,45 +154,6 @@ curl -X POST 'http://deepseek-r1-70b.ksai.scnet.cn:58000/v1/chat/completions' \
   }'
 ```
 
-### deepseek-v4-flash
-**模型信息**
-
-- 模型名称: deepseek-v4-flash
-- base_url: http://deepseek-v4-flash.ksai.scnet.cn:58000
-- model_id: DeepSeek-V4-Flash
-- 模型最大上下文长度: 1000000
-- 副本数: 2/2
-
-**协议支持总览**
-
-| 协议 | 支持 | 状态码 | basic | stream | usage | tool_calls | JSON output | structured output | error format |
-|---|---|---|---|---|---|---|---|---|---|
-| OpenAI Chat Completions | ✅ | 200 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| OpenAI Responses | ✅ | 200 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Anthropic Messages | ✅ | 200 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-
-请求示例:
-```bash
-curl -X POST 'http://deepseek-v4-flash.ksai.scnet.cn:58000/v1/chat/completions' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model": "DeepSeek-V4-Flash",
-    "messages": [{"role": "user", "content": "你好"}],
-    "temperature": 0.7,
-    "stream": false
-  }'
-```
-OpenAI Responses 示例:
-```bash
-curl -X POST 'http://deepseek-v4-flash.ksai.scnet.cn:58000/v1/responses' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model": "DeepSeek-V4-Flash",
-    "input": "你好，请用一句话介绍你自己",
-    "max_output_tokens": 128
-  }'
-```
-
 ### deepseek-v4-pro
 **模型信息**
 
@@ -288,8 +265,8 @@ curl -X POST 'http://qwen3-embedding-8b.ksai.scnet.cn:58000/v1/chat/completions'
 | 协议 | 支持 | 状态码 | basic | stream | usage | tool_calls | JSON output | structured output | error format |
 |---|---|---|---|---|---|---|---|---|---|
 | OpenAI Chat Completions | ✅ | 200 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| OpenAI Responses | ✅ | 200 | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ |
-| Anthropic Messages | ✅ | 200 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| OpenAI Responses | ✅ | 200 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Anthropic Messages | ✅ | 200 | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ |
 
 请求示例:
 ```bash
@@ -424,110 +401,32 @@ curl -X POST 'http://qwen3-235b-a22b.zzai.scnet.ai:58000/v1/responses' \
 
 ## 郑州
 
-### minimax-m25-int8-vip
+### kimi-k26-gateway
 **模型信息**
 
-- 模型名称: minimax-m25-int8-vip
-- base_url: http://minimax-m25-int8-vip.zzai.scnet.cn:58000
-- model_id: /models/MiniMax-M2.5-W8A8
-- 模型最大上下文长度: 196608
-- 副本数: 50/33
-
-**协议支持总览**
-
-| 协议 | 支持 | 状态码 | basic | stream | usage | tool_calls | JSON output | structured output | error format |
-|---|---|---|---|---|---|---|---|---|---|
-| OpenAI Chat Completions | ✅ | 200 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| OpenAI Responses | ✅ | 200 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Anthropic Messages | ✅ | 200 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-
-请求示例:
-```bash
-curl -X POST 'http://minimax-m25-int8-vip.zzai.scnet.cn:58000/v1/chat/completions' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model": "/models/MiniMax-M2.5-W8A8",
-    "messages": [{"role": "user", "content": "你好"}],
-    "temperature": 0.7,
-    "stream": false
-  }'
-```
-OpenAI Responses 示例:
-```bash
-curl -X POST 'http://minimax-m25-int8-vip.zzai.scnet.cn:58000/v1/responses' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model": "/models/MiniMax-M2.5-W8A8",
-    "input": "你好，请用一句话介绍你自己",
-    "max_output_tokens": 128
-  }'
-```
-
-### qwen35-122b-a10
-**模型信息**
-
-- 模型名称: qwen35-122b-a10
-- base_url: http://qwen35-122b-a10.zzai.scnet.cn:58000
-- model_id: Qwen3.5-122B-A10B
-- 模型最大上下文长度: 65536
+- 模型名称: kimi-k26-gateway
+- base_url: http://kimi-k26-gateway.zzai.scnet.cn:58000
+- model_id: Kimi-K2.6
+- 模型最大上下文长度: N/A
 - 副本数: 1/1
 
 **协议支持总览**
 
 | 协议 | 支持 | 状态码 | basic | stream | usage | tool_calls | JSON output | structured output | error format |
 |---|---|---|---|---|---|---|---|---|---|
-| OpenAI Chat Completions | ✅ | 200 | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ |
-| OpenAI Responses | ❌ | 400 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Anthropic Messages | ✅ | 200 | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ |
+| OpenAI Chat Completions | ❌ | 503 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| OpenAI Responses | ❌ | 501 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Anthropic Messages | ❌ | 404 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 
 请求示例:
 ```bash
-curl -X POST 'http://qwen35-122b-a10.zzai.scnet.cn:58000/v1/chat/completions' \
+curl -X POST 'http://kimi-k26-gateway.zzai.scnet.cn:58000/v1/chat/completions' \
   -H 'Content-Type: application/json' \
   -d '{
-    "model": "Qwen3.5-122B-A10B",
+    "model": "Kimi-K2.6",
     "messages": [{"role": "user", "content": "你好"}],
     "temperature": 0.7,
     "stream": false
-  }'
-```
-
-### qwen36-27b-test
-**模型信息**
-
-- 模型名称: qwen36-27b-test
-- base_url: http://qwen36-27b-test.zzai.scnet.cn:58000
-- model_id: Qwen3.6-27B
-- 模型最大上下文长度: 262144
-- 副本数: 1/1
-
-**协议支持总览**
-
-| 协议 | 支持 | 状态码 | basic | stream | usage | tool_calls | JSON output | structured output | error format |
-|---|---|---|---|---|---|---|---|---|---|
-| OpenAI Chat Completions | ✅ | 200 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| OpenAI Responses | ✅ | 200 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Anthropic Messages | ✅ | 200 | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ |
-
-请求示例:
-```bash
-curl -X POST 'http://qwen36-27b-test.zzai.scnet.cn:58000/v1/chat/completions' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model": "Qwen3.6-27B",
-    "messages": [{"role": "user", "content": "你好"}],
-    "temperature": 0.7,
-    "stream": false
-  }'
-```
-OpenAI Responses 示例:
-```bash
-curl -X POST 'http://qwen36-27b-test.zzai.scnet.cn:58000/v1/responses' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model": "Qwen3.6-27B",
-    "input": "你好，请用一句话介绍你自己",
-    "max_output_tokens": 128
   }'
 ```
 

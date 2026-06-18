@@ -8,9 +8,10 @@ notify = [ "/bin/sh", "/Users/humin/.codex/notify_on_finish.sh" ]
 approvals_reviewer = "user"
 
 
-model = "qwen3.7-max"
-model_provider = "dashscope"
-model_context_window = 256000
+model = "gpt-5.5"
+model_provider = "scnet"
+model_context_window = 128000
+model_reasoning_effort = "medium"
 
 [model_providers.minimax]
 name = "MiniMax"
@@ -49,6 +50,20 @@ base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 experimental_bearer_token = "sk-e55ed9400a2d44389528ac534e949eb6"
 wire_api = "responses"
 models = [ "qwen3.7-max" ]
+
+[model_providers.scnet]
+name = "SCNet LiteLLM"
+base_url = "https://api.scnet.cn/api/gw/v1"
+experimental_bearer_token = "sk-sJTEJwZrVwZ7T5AIsjNwjw"
+wire_api = "responses"
+models = [
+  "gpt-5.5",
+  "claude-opus-4-8",
+  "deepseek-v4-pro",
+  "deepseek-v4-flash",
+  "gemini-3.5-flash",
+  "gemini-3.1-flash-lite"
+]
 
 [mcp_servers.playwright]
 args = [ "@playwright/mcp@latest" ]

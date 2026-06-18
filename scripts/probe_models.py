@@ -13,6 +13,7 @@ from typing import Any
 
 
 OUTPUT_FILE = os.path.expanduser("~/agent/reports/available_models.md")
+FEISHU_DOC = "Wab0dqBUto5NFixdPzWc0rGWnYg"
 CLUSTERS = [
     {"name": "昆山", "context": "ks", "namespace": "ske-model"},
     {"name": "郑州", "context": "zz", "namespace": "ske-model"},
@@ -890,6 +891,7 @@ def yes_no(value):
 
 def render_markdown(all_models, region_groups):
     md = ""
+    md += "# 模型服务信息\n\n"
     md += "## 模型总览\n\n"
     md += "| 模型 | Chat | Responses | Anthropic | 副本数 |\n"
     md += "|------|------|-----------|-----------|--------|\n"
@@ -994,6 +996,22 @@ def main():
         file_obj.write(markdown)
 
     print(f"报告已生成: {OUTPUT_FILE}")
+
+    if FEISHU_DOC:
+        print(f"\n正在更新飞书文档...")
+        update_cmd = [
+            "lark-cli", "docs", "+update", "--api-version", "v2",
+            "--doc", FEISHU_DOC,
+            "--command", "overwrite",
+            "--doc-format", "markdown",
+            "--content", f"@{OUTPUT_FILE}",
+        ]
+        result = subprocess.run(update_cmd, capture_output=True, text=True, cwd=os.path.dirname(OUTPUT_FILE))
+        if result.returncode == 0:
+            print("飞书文档更新成功")
+        else:
+            print(f"飞书文档更新失败: {result.stderr}")
+
     print("\n" + markdown)
 
 

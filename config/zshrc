@@ -29,11 +29,11 @@ export LARK_CLI_NO_PROXY=1
 
 
 # Proxy settings
-export http_proxy="http://127.0.0.1:7890"
-export https_proxy="http://127.0.0.1:7890"
-export all_proxy="socks5://127.0.0.1:7890"
-export no_proxy="localhost,127.0.0.1,0.0.0.0,::1"
-export NO_PROXY="localhost,127.0.0.1,0.0.0.0,::1"
+# export http_proxy="http://127.0.0.1:7890"
+# export https_proxy="http://127.0.0.1:7890"
+# export all_proxy="socks5://127.0.0.1:7890"
+# export no_proxy="localhost,127.0.0.1,0.0.0.0,::1,.local,10.,28.197.,192.168.,.scnet.cn,.scnet.work,.scnet.com"
+# export NO_PROXY="localhost,127.0.0.1,0.0.0.0,::1,.local,10.,28.197.,192.168.,.scnet.cn,.scnet.work,.scnet.com"
 
 # Added by Antigravity
 export GEMINI_API_KEY=AIzaSyB5yGHyX4-amj9pL8GKLU5a-n9A83WICxo
