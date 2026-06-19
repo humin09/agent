@@ -111,6 +111,16 @@ globs: ["**/*"]
 
 生产集群：`ks`、`qd`、`dz`、`zz`、`ny`、`wh`、`sz`、`wq`、`tx`.
 
+**ly 与 zz 的关系**（共享基础设施）：
+
+- `ly`（洛阳）和 `zz`（郑州）是同一个物理集群的两个 context，共用：
+  - **ex-lb**（公网入口，如 `oss.zzai.scnet.cn`、`vm.zzai.scnet.cn` 都跑在郑州 ex-lb 节点上）
+  - **minio**（ly 的 minio 服务 `http://oss.zzai.scnet.cn:9000` 实际是 zz 节点的 ex-lb 转发）
+  - **vm** / **vl**（VictoriaMetrics / VictoriaLogs）
+  - **http-proxy** / **gitlab**
+- `kubectl --context ly` 和 `--context zz` 连的是不同的 K8s API server，但集群内的 Pod 和服务是共享的
+- **注意**：ly minio 的 Pod 监控数据未上报到共享 VM（`vm.zzai.scnet.cn`），因为其 servicemonitor 未启用；需要用 `scrape_minio_metrics()` 从 http endpoint 直接抓取
+
 平台基线：
 
 - Kubernetes / kubelet / kube-proxy: `v1.26.8`

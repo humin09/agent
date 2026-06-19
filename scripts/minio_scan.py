@@ -34,7 +34,10 @@ VM_ENDPOINTS = {
     "ks": "https://vm.ksai.scnet.cn:58043/select/0/prometheus",
     "dz": "https://vm.dzai.scnet.cn:58043/select/0/prometheus",
     "qd": "https://vm.qdai.scnet.cn:58043/select/0/prometheus",
-    "ly": "https://vm.lyai.scnet.cn:58043/select/0/prometheus",
+    # ly 和 zz 是同一个集群的共享基础设施（vm, vl, minio, ex-lb），
+    # 共用同一个 VM endpoint，但 ly minio 的 servicemonitor 未启用（见 AGENTS.md 注意事项）
+    "ly": "https://vm.zzai.scnet.cn:58043/select/0/prometheus",
+    "zz": "https://vm.zzai.scnet.cn:58043/select/0/prometheus",
 }
 
 MC_ONLY_CLUSTERS = ["xa"]
