@@ -56,11 +56,15 @@ def _fmt_bytes(b: Optional[int]) -> str:
 
 
 def _fmt_bps(bps: Optional[float]) -> str:
-    if bps is None or bps <= 0:
+    if bps is None:
         return "-"
+    if bps == 0.0:
+        return "0.0 MB/s (0.00 TiB/h)"
     mb_s = bps / (1024 ** 2)
     tb_h = bps * 3600 / (1024 ** 4)
-    return f"{mb_s:.1f} MB/s ({tb_h:.2f} TiB/h)"
+    if tb_h < 0.01:
+        return f"{mb_s:.2f} MB/s"
+    return f"{mb_s:.2f} MB/s ({tb_h:.2f} TiB/h)"
 
 
 def _fmt_objs(n: Optional[int]) -> str:
@@ -187,6 +191,25 @@ def vm_bucket_bytes_rate(cluster: str, bucket: str, window: str = "6h") -> Optio
     return best
 
 
+def vm_batch_replicate_object_rate(cluster: str, bucket: str, window: str = "6h") -> Optional[float]:
+    """返回 window 内所有 batch replicate 任务的总 object 速率 (objects/sec)。"""
+    results = vm_query(
+        cluster,
+        f'rate(minio_bucket_batch_replicate_objects{{bucket="{bucket}"}}[{window}])',
+    )
+    total_rate = 0.0
+    for r in results:
+        # 只统计 pod 级别的指标，避免重复计算 (job=minio vs job=minio-ks 会重复)
+        if r.get("metric", {}).get("job", "").startswith("minio-"):
+            continue
+        try:
+            v = float(r["value"][1])
+            total_rate += max(0, v)
+        except (KeyError, ValueError, IndexError, TypeError):
+            pass
+    return total_rate if total_rate > 0 else None
+
+
 def vm_batch_replicate_status(cluster: str, bucket: str) -> list[dict]:
     """返回各 jobId 的 (replicated, failed) 计数。"""
     repl = vm_query(
@@ -223,15 +246,16 @@ def fetch_cluster(cluster: str) -> dict:
         objs, byt = vm_bucket_usage(cluster, BUCKET)
         if objs is not None:
             bps = vm_bucket_bytes_rate(cluster, BUCKET, "6h")
+            obj_rate = vm_batch_replicate_object_rate(cluster, BUCKET, "6h")
             batch = vm_batch_replicate_status(cluster, BUCKET)
-            info.update(objects=objs, bytes=byt, bps=bps, batch=batch)
+            info.update(objects=objs, bytes=byt, bps=bps, obj_rate=obj_rate, batch=batch)
             return info
         # VM 不可达（如 ly），尝试 mc 兜底
         if cluster == "ly":
             print(f"[{cluster}] VM 不可达，回退到 mc 查询 oss.zzai.scnet.cn", file=sys.stderr)
             objs, byt = mc_bucket_stat("ly", BUCKET,
                                        endpoint="http://oss.zzai.scnet.cn:9000")
-            info.update(objects=objs, bytes=byt, bps=None, batch=[])
+            info.update(objects=objs, bytes=byt, bps=None, obj_rate=None, batch=[])
             return info
 
     if cluster in MC_ONLY_CLUSTERS:
@@ -239,10 +263,10 @@ def fetch_cluster(cluster: str) -> dict:
         objs, byt = mc_bucket_stat(
             cluster, BUCKET, endpoint="http://221.11.21.199:9000"
         )
-        info.update(objects=objs, bytes=byt, bps=None, batch=[])
+        info.update(objects=objs, bytes=byt, bps=None, obj_rate=None, batch=[])
         return info
 
-    info.update(objects=None, bytes=None, bps=None, batch=[])
+    info.update(objects=None, bytes=None, bps=None, obj_rate=None, batch=[])
     return info
 
 
@@ -290,8 +314,8 @@ def main() -> int:
     print(f"- ly（oss.zzai.scnet.cn:9000 = 洛阳）：{_fmt_objs(ly_objs)} objects / {_fmt_bytes(ly_byt)}")
     print()
 
-    header = "| 集群 | 源 | 对象数 | 进度 | 差距 | 容量 | 速率(6h) | batch job |"
-    sep    = "|------|---|--------|------|------|------|---------|-----------|"
+    header = "| 集群 | 源 | 对象数 | 进度 | 差距 | 容量 | 对象速率(6h) | 字节速率(6h) | ETA | batch job |"
+    sep    = "|------|---|--------|------|------|------|-------------|-------------|-----|-----------|"
     print(header)
     print(sep)
 
@@ -300,39 +324,64 @@ def main() -> int:
         if c == "xa":
             src_name = "(源)"
             src_objs = xa_objs
+            src_byt = xa_byt
         elif c == "ly":
             # ly 不作为任何目的集群的 destination，单独显示
             src_name = "(源)"
             src_objs = ly_objs
+            src_byt = ly_byt
         elif src:
             src_name = src["origin"]
             if src_name == "xa":
                 src_objs = xa_objs
+                src_byt = xa_byt
             elif src_name == "ly":
                 src_objs = ly_objs
+                src_byt = ly_byt
             else:
                 src_objs = None
+                src_byt = None
         else:
             src_name = "-"
             src_objs = None
+            src_byt = None
 
         info = results.get(c, {})
         objs = info.get("objects")
         byt = info.get("bytes")
         bps = info.get("bps")
+        obj_rate = info.get("obj_rate")
         batch = info.get("batch", [])
 
         if objs is None:
-            print(f"| **{c.upper()}** | {src_name} | ❓ | - | - | - | - | - |")
+            print(f"| **{c.upper()}** | {src_name} | ❓ | - | - | - | - | - | - | - |")
             continue
 
         if src_objs is not None and src_objs > 0:
             diff = src_objs - objs
             pct = objs / src_objs * 100
-            gap = "-" + f"{diff:,}" if diff > 0 else "✅"
+            gap = f"-{diff:,}" if diff > 0 else "✅"
         else:
             pct = 0.0
+            diff = None
             gap = "N/A"
+
+        # 对象速率
+        obj_rate_str = f"{obj_rate:.1f} obj/s" if obj_rate and obj_rate > 0 else "-"
+
+        # 字节速率
+        bps_str = _fmt_bps(bps)
+
+        # ETA：基于剩余对象数和对象速率
+        eta_str = "-"
+        if obj_rate and obj_rate > 0 and diff is not None and diff > 0:
+            eta_sec = diff / obj_rate
+            if eta_sec < 3600:
+                eta_str = f"{eta_sec/60:.0f}m"
+            elif eta_sec < 86400:
+                eta_str = f"{eta_sec/3600:.1f}h"
+            else:
+                eta_str = f"{eta_sec/86400:.1f}d"
 
         batch_summary = "-"
         if batch:
@@ -346,7 +395,7 @@ def main() -> int:
             batch_summary = "<br>".join(parts)
 
         print(f"| **{c.upper()}** | {src_name} | {_fmt_objs(objs)} | {pct:.2f}% | {gap} | "
-              f"{_fmt_bytes(byt)} | {_fmt_bps(bps)} | {batch_summary} |")
+              f"{_fmt_bytes(byt)} | {obj_rate_str} | {bps_str} | {eta_str} | {batch_summary} |")
 
     print()
     return 0
