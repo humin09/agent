@@ -161,8 +161,7 @@ HTTP 端口改为 `58000`.常见 app：`ingress`、`vm`、`vl`、模型服务名
 - `multipoint-scheduler` | `ske` | `~/sugon/ske-chart/multipoint-scheduler`
 - `volcano` | `volcano-system` | `~/sugon/ske-chart/volcano`
 - `kubesphere` | `kubesphere-system` | `~/sugon/ske-chart/kubesphere`
-- `minio-client` | `ske` | `~/sugon/ske-chart/minio-client`
-- `minio-server` | `ske` | `~/sugon/ske-chart/minio-server`
+- `minio-server` | `ske` | `~/sugon/ske-chart/minio-server`（含 gitlab-lfs-prod batch replicate 配置）
 - `alert` | `ske` | `~/sugon/ske-chart/alert`
 - `ex-lb` | 节点部署 | `~/sugon/ske-chart/ex-lb`
 - `http-proxy` | `ske` + `ske-model` | `~/sugon/ske-chart/http-proxy`
@@ -188,8 +187,7 @@ HTTP 端口改为 `58000`.常见 app：`ingress`、`vm`、`vl`、模型服务名
 | `multipoint-scheduler` | `ske` | `~/sugon/ske-chart/multipoint-scheduler` |
 | `volcano` | `volcano-system` | `~/sugon/ske-chart/volcano` |
 | `kubesphere` | `kubesphere-system` | `~/sugon/ske-chart/kubesphere` |
-| `minio-client` | `ske` | `~/sugon/ske-chart/minio-client` |
-| `minio-server` | `ske` | `~/sugon/ske-chart/minio-server` |
+| `minio-server` | `ske` | `~/sugon/ske-chart/minio-server`（含 gitlab-lfs-prod batch replicate 配置）|
 | `alert` | `ske` | `~/sugon/ske-chart/alert` |
 | `ex-lb` | 节点部署 | `~/sugon/ske-chart/ex-lb` |
 | `http-proxy` | `ske` + `ske-model` | `~/sugon/ske-chart/http-proxy` |
