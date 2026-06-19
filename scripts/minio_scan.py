@@ -130,7 +130,55 @@ def mc_bucket_stat(alias: str, bucket: str, endpoint: Optional[str] = None,
         return None, None
 
 
-# ── VM 方式 ─────────────────────────────────────────────
+# ── mc 兜底：查 batch job（ly 等无 VM 的集群）─────────────
+
+# 状态缓存：用于 ly 这种无 VM 的集群计算 rate
+_STATE_FILE = "/tmp/minio_scan_state.json"
+
+
+def _load_state() -> dict:
+    try:
+        with open(_STATE_FILE) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError, PermissionError):
+        return {}
+
+
+def _save_state(state: dict) -> None:
+    try:
+        with open(_STATE_FILE, "w") as f:
+            json.dump(state, f)
+    except Exception:
+        pass
+
+
+def mc_batch_ls(alias: str, endpoint: Optional[str] = None) -> list[dict]:
+    """用 mc batch ls 查询 batch job 列表，返回类似 vm_batch_replicate_status 的结构。"""
+    real_alias = _ensure_mc_alias(alias, endpoint) if endpoint else alias
+    try:
+        p = subprocess.run(
+            ["mc", "batch", "ls", real_alias],
+            capture_output=True, text=True, timeout=30,
+        )
+        if p.returncode != 0:
+            return []
+        jobs = []
+        for line in p.stdout.splitlines()[1:]:  # skip header
+            parts = line.split()
+            if len(parts) >= 3 and parts[1] == "replicate":
+                job_id = parts[0]
+                status = parts[-1] if len(parts) >= 5 else "unknown"
+                # 无 VM 时无法获取精确对象数，给个占位
+                if status == "in-progress":
+                    jobs.append({"jobId": job_id, "replicated": -1, "failed": -1})
+                else:
+                    jobs.append({"jobId": job_id, "replicated": -1, "failed": -1})
+        return jobs
+    except Exception:
+        return []
+
+
+
 def vm_query(cluster: str, query: str) -> list[dict]:
     """返回 VM query 的 result 列表；失败返回空列表。"""
     base_url = VM_ENDPOINTS[cluster].rstrip("/")
@@ -248,6 +296,10 @@ def fetch_cluster(cluster: str) -> dict:
             bps = vm_bucket_bytes_rate(cluster, BUCKET, "6h")
             obj_rate = vm_batch_replicate_object_rate(cluster, BUCKET, "6h")
             batch = vm_batch_replicate_status(cluster, BUCKET)
+            # 写入状态缓存 (用于无 VM 集群计算 delta rate)
+            state = _load_state()
+            state[cluster] = {"objects": objs, "bytes": byt, "timestamp": time.time()}
+            _save_state(state)
             info.update(objects=objs, bytes=byt, bps=bps, obj_rate=obj_rate, batch=batch)
             return info
         # VM 不可达（如 ly），尝试 mc 兜底
@@ -255,7 +307,23 @@ def fetch_cluster(cluster: str) -> dict:
             print(f"[{cluster}] VM 不可达，回退到 mc 查询 oss.zzai.scnet.cn", file=sys.stderr)
             objs, byt = mc_bucket_stat("ly", BUCKET,
                                        endpoint="http://oss.zzai.scnet.cn:9000")
-            info.update(objects=objs, bytes=byt, bps=None, obj_rate=None, batch=[])
+            batch = mc_batch_ls("ly", endpoint="http://oss.zzai.scnet.cn:9000")
+            # 用状态缓存计算 delta rate（需要上次运行数据）
+            state = _load_state()
+            prev = state.get("ly", {})
+            obj_rate = None
+            bps = None
+            if prev.get("objects") is not None and prev.get("timestamp"):
+                dt = time.time() - prev["timestamp"]
+                if dt > 60 and objs is not None and prev["objects"] is not None:
+                    obj_rate = max(0, (objs - prev["objects"]) / dt)
+                if dt > 60 and byt is not None and prev["bytes"] is not None:
+                    bps = max(0, (byt - prev["bytes"]) / dt)
+            # 写回状态缓存
+            if objs is not None:
+                state["ly"] = {"objects": objs, "bytes": byt, "timestamp": time.time()}
+                _save_state(state)
+            info.update(objects=objs, bytes=byt, bps=bps, obj_rate=obj_rate, batch=batch)
             return info
 
     if cluster in MC_ONLY_CLUSTERS:
@@ -321,15 +389,15 @@ def main() -> int:
 
     for c in clusters:
         src = CLUSTER_ORIGINS.get(c)
+        # ly = xa 的目的站 + dz/qd 的源站，需要特殊处理
         if c == "xa":
             src_name = "(源)"
+            src_objs = None
+            src_byt = None
+        elif c == "ly":
+            src_name = "xa"
             src_objs = xa_objs
             src_byt = xa_byt
-        elif c == "ly":
-            # ly 不作为任何目的集群的 destination，单独显示
-            src_name = "(源)"
-            src_objs = ly_objs
-            src_byt = ly_byt
         elif src:
             src_name = src["origin"]
             if src_name == "xa":
@@ -391,7 +459,11 @@ def main() -> int:
                 short = jid[-8:] if len(jid) > 8 else jid
                 rep = b.get("replicated", 0)
                 fail = b.get("failed", 0)
-                parts.append(f"{short} (OK {rep:,}, fail {fail:,})")
+                # -1 = unknown (from mc batch ls fallback, no VM)
+                if rep == -1 and fail == -1:
+                    parts.append(f"{short} (⚡ running)")
+                else:
+                    parts.append(f"{short} (OK {rep:,}, fail {fail:,})")
             batch_summary = "<br>".join(parts)
 
         print(f"| **{c.upper()}** | {src_name} | {_fmt_objs(objs)} | {pct:.2f}% | {gap} | "
