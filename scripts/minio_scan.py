@@ -130,7 +130,9 @@ def mc_bucket_stat(alias: str, bucket: str, endpoint: Optional[str] = None,
         return None, None
 
 
-# ── mc 兜底：查 batch job（ly 等无 VM 的集群）─────────────
+# ── 直接抓取 minio 指标（ly 等公网可达但无 VM 的集群）─────────────
+
+LY_METRICS_URL = "http://oss.zzai.scnet.cn:9000/minio/v2/metrics/cluster"
 
 # 状态缓存：用于 ly 这种无 VM 的集群计算 rate
 _STATE_FILE = "/tmp/minio_scan_state.json"
@@ -152,30 +154,55 @@ def _save_state(state: dict) -> None:
         pass
 
 
-def mc_batch_ls(alias: str, endpoint: Optional[str] = None) -> list[dict]:
-    """用 mc batch ls 查询 batch job 列表，返回类似 vm_batch_replicate_status 的结构。"""
-    real_alias = _ensure_mc_alias(alias, endpoint) if endpoint else alias
+def scrape_minio_metrics(url: str, bucket: str) -> tuple[Optional[int], Optional[int], list[dict]]:
+    """直接从 minio /metrics endpoint 抓取指标，返回 (objects, bytes, batch_jobs)。"""
     try:
-        p = subprocess.run(
-            ["mc", "batch", "ls", real_alias],
-            capture_output=True, text=True, timeout=30,
-        )
-        if p.returncode != 0:
-            return []
-        jobs = []
-        for line in p.stdout.splitlines()[1:]:  # skip header
-            parts = line.split()
-            if len(parts) >= 3 and parts[1] == "replicate":
-                job_id = parts[0]
-                status = parts[-1] if len(parts) >= 5 else "unknown"
-                # 无 VM 时无法获取精确对象数，给个占位
-                if status == "in-progress":
-                    jobs.append({"jobId": job_id, "replicated": -1, "failed": -1})
-                else:
-                    jobs.append({"jobId": job_id, "replicated": -1, "failed": -1})
-        return jobs
-    except Exception:
-        return []
+        resp = requests.get(url, timeout=15)
+        resp.raise_for_status()
+        lines = resp.text.splitlines()
+
+        objs = None
+        byt = None
+        batch_jobs: dict[str, dict] = {}
+
+        for line in lines:
+            if line.startswith("#"):
+                continue
+            # minio_bucket_usage_object_total
+            m = re.match(rf'minio_bucket_usage_object_total{{.*bucket="{bucket}".*}} (\d+)', line)
+            if m:
+                objs = max(objs or 0, int(m.group(1)))
+                continue
+            # minio_bucket_usage_total_bytes
+            m = re.match(rf'minio_bucket_usage_total_bytes{{.*bucket="{bucket}".*}} (\d+)', line)
+            if m:
+                byt = max(byt or 0, int(m.group(1)))
+                continue
+            # minio_bucket_batch_replicate_objects
+            m = re.match(
+                rf'minio_bucket_batch_replicate_objects{{.*bucket="{bucket}".*jobId="([^"]+)".*}} (\d+)',
+                line,
+            )
+            if m:
+                job_id, count = m.group(1), int(m.group(2))
+                batch_jobs.setdefault(job_id, {"replicated": 0, "failed": 0})
+                batch_jobs[job_id]["replicated"] = count
+                continue
+            # minio_bucket_batch_replicate_objects_failed
+            m = re.match(
+                rf'minio_bucket_batch_replicate_objects_failed{{.*bucket="{bucket}".*jobId="([^"]+)".*}} (\d+)',
+                line,
+            )
+            if m:
+                job_id, count = m.group(1), int(m.group(2))
+                batch_jobs.setdefault(job_id, {"replicated": 0, "failed": 0})
+                batch_jobs[job_id]["failed"] = count
+                continue
+
+        return objs, byt, [{"jobId": j, **v} for j, v in batch_jobs.items()]
+    except Exception as e:
+        print(f"[metrics {url}] 抓取失败: {e}", file=sys.stderr)
+        return None, None, []
 
 
 
@@ -302,27 +329,36 @@ def fetch_cluster(cluster: str) -> dict:
             _save_state(state)
             info.update(objects=objs, bytes=byt, bps=bps, obj_rate=obj_rate, batch=batch)
             return info
-        # VM 不可达（如 ly），尝试 mc 兜底
         if cluster == "ly":
-            print(f"[{cluster}] VM 不可达，回退到 mc 查询 oss.zzai.scnet.cn", file=sys.stderr)
+            print(f"[{cluster}] VM 不可达，mc stat + metrics scrape", file=sys.stderr)
             objs, byt = mc_bucket_stat("ly", BUCKET,
                                        endpoint="http://oss.zzai.scnet.cn:9000")
-            batch = mc_batch_ls("ly", endpoint="http://oss.zzai.scnet.cn:9000")
-            # 用状态缓存计算 delta rate（需要上次运行数据）
+            _, _, batch = scrape_minio_metrics(LY_METRICS_URL, BUCKET)
+            # 用 batch replicate 计数的 delta 来计算对象速率（比 mc stat bucket count 更敏感）
             state = _load_state()
             prev = state.get("ly", {})
             obj_rate = None
             bps = None
-            if prev.get("objects") is not None and prev.get("timestamp"):
+            curr_replicated = sum(b.get("replicated", 0) for b in batch)
+            if prev.get("batch_replicated") is not None and prev.get("timestamp"):
                 dt = time.time() - prev["timestamp"]
-                if dt > 60 and objs is not None and prev["objects"] is not None:
-                    obj_rate = max(0, (objs - prev["objects"]) / dt)
+                if dt > 30 and curr_replicated > 0:
+                    delta_objs = curr_replicated - prev["batch_replicated"]
+                    if delta_objs > 0:
+                        obj_rate = delta_objs / dt
+            # 字节速率从 mc stat bucket 字节数差值
+            if prev.get("bytes") is not None and prev.get("timestamp"):
+                dt = time.time() - prev["timestamp"]
                 if dt > 60 and byt is not None and prev["bytes"] is not None:
                     bps = max(0, (byt - prev["bytes"]) / dt)
             # 写回状态缓存
-            if objs is not None:
-                state["ly"] = {"objects": objs, "bytes": byt, "timestamp": time.time()}
-                _save_state(state)
+            state["ly"] = {
+                "objects": objs,
+                "bytes": byt,
+                "batch_replicated": curr_replicated,
+                "timestamp": time.time(),
+            }
+            _save_state(state)
             info.update(objects=objs, bytes=byt, bps=bps, obj_rate=obj_rate, batch=batch)
             return info
 
