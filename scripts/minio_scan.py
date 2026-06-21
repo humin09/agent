@@ -25,7 +25,7 @@ requests.packages.urllib3.disable_warnings()
 BUCKET = "gitlab-lfs-prod"
 
 CLUSTER_ORIGINS = {
-    "ks": {"origin": "xa", "endpoint": "http://221.11.21.199:9000"},
+    "ks": {"origin": "ly", "endpoint": "http://oss.zzai.scnet.cn:9000"},
     "dz": {"origin": "ly", "endpoint": "http://oss.zzai.scnet.cn:9000"},
     "qd": {"origin": "ly", "endpoint": "http://oss.zzai.scnet.cn:9000"},
 }
