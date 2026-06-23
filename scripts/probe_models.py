@@ -893,16 +893,26 @@ def render_markdown(all_models, region_groups):
     md = ""
     md += "# 模型服务信息\n\n"
     md += "## 模型总览\n\n"
-    md += "| 模型 | Chat | Responses | Anthropic | 副本数 |\n"
-    md += "|------|------|-----------|-----------|--------|\n"
+    md += "| 模型 | 集群 | Chat | Responses | Anthropic | 副本数 |\n"
+    md += "|------|------|------|-----------|-----------|--------|\n"
+
+    for region in sorted(region_groups.keys()):
+        for model_name, model_info in sorted(region_groups[region], key=lambda x: x[0]):
+            protocol_status = model_info.get("protocols", {})
+            chat = "✅" if protocol_status.get("chat_completions", {}).get("supported") else "❌"
+            responses = "✅" if protocol_status.get("responses", {}).get("supported") else "❌"
+            anthropic = "✅" if protocol_status.get("anthropic_messages", {}).get("supported") else "❌"
+            md += f"| {model_name} | {model_info.get('region', region)} | {chat} | {responses} | {anthropic} | {model_info['replicas']} |\n"
 
     for model_name in sorted(all_models.keys()):
         model_info = all_models[model_name]
+        if model_info.get("region") is not None:
+            continue
         protocol_status = model_info.get("protocols", {})
         chat = "✅" if protocol_status.get("chat_completions", {}).get("supported") else "❌"
         responses = "✅" if protocol_status.get("responses", {}).get("supported") else "❌"
         anthropic = "✅" if protocol_status.get("anthropic_messages", {}).get("supported") else "❌"
-        md += f"| {model_name} | {chat} | {responses} | {anthropic} | {model_info['replicas']} |\n"
+        md += f"| {model_name} | - | {chat} | {responses} | {anthropic} | {model_info['replicas']} |\n"
 
     md += "\n"
 
@@ -1004,7 +1014,7 @@ def main():
             "--doc", FEISHU_DOC,
             "--command", "overwrite",
             "--doc-format", "markdown",
-            "--content", f"@{OUTPUT_FILE}",
+            "--content", f"@./{os.path.basename(OUTPUT_FILE)}",
         ]
         result = subprocess.run(update_cmd, capture_output=True, text=True, cwd=os.path.dirname(OUTPUT_FILE))
         if result.returncode == 0:

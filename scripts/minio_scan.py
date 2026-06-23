@@ -25,17 +25,17 @@ requests.packages.urllib3.disable_warnings()
 BUCKET = "gitlab-lfs-prod"
 
 CLUSTER_ORIGINS = {
-    "ks": {"origin": "ly", "endpoint": "http://oss.zzai.scnet.cn:9000"},
-    "dz": {"origin": "ly", "endpoint": "http://oss.zzai.scnet.cn:9000"},
-    "qd": {"origin": "ly", "endpoint": "http://oss.zzai.scnet.cn:9000"},
+    "ks": {"origin": "xa", "endpoint": "http://221.11.21.199:9000"},
+    "dz": {"origin": "xa", "endpoint": "http://221.11.21.199:9000"},
+    "qd": {"origin": "xa", "endpoint": "http://221.11.21.199:9000"},
+    "ly": {"origin": "xa", "endpoint": "http://221.11.21.199:9000"},
 }
 
 VM_ENDPOINTS = {
     "ks": "https://vm.ksai.scnet.cn:58043/select/0/prometheus",
     "dz": "https://vm.dzai.scnet.cn:58043/select/0/prometheus",
     "qd": "https://vm.qdai.scnet.cn:58043/select/0/prometheus",
-    # ly 和 zz 是同一个集群的共享基础设施（vm, vl, minio, ex-lb），
-    # 共用同一个 VM endpoint，但 ly minio 的 servicemonitor 未启用（见 AGENTS.md 注意事项）
+    # ly 和 zz 是同一个集群的共享基础设施（vm, vl, minio, ex-lb），共用同一个 VM endpoint
     "ly": "https://vm.zzai.scnet.cn:58043/select/0/prometheus",
     "zz": "https://vm.zzai.scnet.cn:58043/select/0/prometheus",
 }
@@ -269,6 +269,22 @@ def vm_bucket_bytes_rate(cluster: str, bucket: str, window: str = "6h") -> Optio
     return best
 
 
+def vm_bucket_download_rate(cluster: str, bucket: str, window: str = "6h") -> Optional[float]:
+    """返回 window 内平均下载速率 (bytes/sec)。使用 bucket_traffic_sent_bytes rate。"""
+    results = vm_query(
+        cluster,
+        f'rate(minio_bucket_traffic_sent_bytes{{bucket="{bucket}"}}[{window}])',
+    )
+    total_rate = 0.0
+    for r in results:
+        try:
+            v = float(r["value"][1])
+            total_rate += max(0, v)
+        except (KeyError, ValueError, IndexError, TypeError):
+            pass
+    return total_rate if total_rate > 0 else None
+
+
 def vm_batch_replicate_object_rate(cluster: str, bucket: str, window: str = "6h") -> Optional[float]:
     """返回 window 内所有 batch replicate 任务的总 object 速率 (objects/sec)。"""
     results = vm_query(
@@ -327,42 +343,12 @@ def fetch_cluster(cluster: str) -> dict:
             obj_rate = vm_batch_replicate_object_rate(cluster, BUCKET, "6h")
             batch = vm_batch_replicate_status(cluster, BUCKET)
             # 写入状态缓存 (用于无 VM 集群计算 delta rate)
+            dl_rate = vm_bucket_download_rate(cluster, BUCKET, "6h")
+
             state = _load_state()
             state[cluster] = {"objects": objs, "bytes": byt, "timestamp": time.time()}
             _save_state(state)
-            info.update(objects=objs, bytes=byt, bps=bps, obj_rate=obj_rate, batch=batch)
-            return info
-        if cluster == "ly":
-            print(f"[{cluster}] VM 不可达，mc stat + metrics scrape", file=sys.stderr)
-            objs, byt = mc_bucket_stat("ly", BUCKET,
-                                       endpoint="http://oss.zzai.scnet.cn:9000")
-            _, _, batch = scrape_minio_metrics(LY_METRICS_URL, BUCKET)
-            # 用 batch replicate 计数的 delta 来计算对象速率（比 mc stat bucket count 更敏感）
-            state = _load_state()
-            prev = state.get("ly", {})
-            obj_rate = None
-            bps = None
-            curr_replicated = sum(b.get("replicated", 0) for b in batch)
-            if prev.get("batch_replicated") is not None and prev.get("timestamp"):
-                dt = time.time() - prev["timestamp"]
-                if dt > 30 and curr_replicated > 0:
-                    delta_objs = curr_replicated - prev["batch_replicated"]
-                    if delta_objs > 0:
-                        obj_rate = delta_objs / dt
-            # 字节速率从 mc stat bucket 字节数差值
-            if prev.get("bytes") is not None and prev.get("timestamp"):
-                dt = time.time() - prev["timestamp"]
-                if dt > 60 and byt is not None and prev["bytes"] is not None:
-                    bps = max(0, (byt - prev["bytes"]) / dt)
-            # 写回状态缓存
-            state["ly"] = {
-                "objects": objs,
-                "bytes": byt,
-                "batch_replicated": curr_replicated,
-                "timestamp": time.time(),
-            }
-            _save_state(state)
-            info.update(objects=objs, bytes=byt, bps=bps, obj_rate=obj_rate, batch=batch)
+            info.update(objects=objs, bytes=byt, bps=bps, obj_rate=obj_rate, dl_rate=dl_rate, batch=batch)
             return info
 
     if cluster in MC_ONLY_CLUSTERS:
@@ -370,10 +356,10 @@ def fetch_cluster(cluster: str) -> dict:
         objs, byt = mc_bucket_stat(
             cluster, BUCKET, endpoint="http://221.11.21.199:9000"
         )
-        info.update(objects=objs, bytes=byt, bps=None, obj_rate=None, batch=[])
+        info.update(objects=objs, bytes=byt, bps=None, obj_rate=None, dl_rate=None, batch=[])
         return info
 
-    info.update(objects=None, bytes=None, bps=None, obj_rate=None, batch=[])
+    info.update(objects=None, bytes=None, bps=None, obj_rate=None, dl_rate=None, batch=[])
     return info
 
 
@@ -421,7 +407,7 @@ def main() -> int:
     print(f"- ly（oss.zzai.scnet.cn:9000 = 洛阳）：{_fmt_objs(ly_objs)} objects / {_fmt_bytes(ly_byt)}")
     print()
 
-    header = "| 集群 | 源 | 对象数 | 进度 | 差距 | 容量 | 对象速率(6h) | 字节速率(6h) | ETA | batch job |"
+    header = "| 集群 | 源 | 对象数 | 进度 | 差距 | 容量 | 下载速率(6h) | 同步速率(6h) | ETA | batch job |"
     sep    = "|------|---|--------|------|------|------|-------------|-------------|-----|-----------|"
     print(header)
     print(sep)
@@ -458,6 +444,7 @@ def main() -> int:
         byt = info.get("bytes")
         bps = info.get("bps")
         obj_rate = info.get("obj_rate")
+        dl_rate = info.get("dl_rate")
         batch = info.get("batch", [])
 
         if objs is None:
@@ -476,8 +463,8 @@ def main() -> int:
         # 对象速率
         obj_rate_str = f"{obj_rate:.1f} obj/s" if obj_rate and obj_rate > 0 else "-"
 
-        # 字节速率
-        bps_str = _fmt_bps(bps)
+        # 下载速率
+        dl_rate_str = _fmt_bps(dl_rate)
 
         # ETA：基于剩余对象数和对象速率
         eta_str = "-"
@@ -506,7 +493,7 @@ def main() -> int:
             batch_summary = "<br>".join(parts)
 
         print(f"| **{c.upper()}** | {src_name} | {_fmt_objs(objs)} | {pct:.2f}% | {gap} | "
-              f"{_fmt_bytes(byt)} | {obj_rate_str} | {bps_str} | {eta_str} | {batch_summary} |")
+              f"{_fmt_bytes(byt)} | {dl_rate_str} | {obj_rate_str} | {eta_str} | {batch_summary} |")
 
     print()
     return 0
