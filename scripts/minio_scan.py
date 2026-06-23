@@ -41,8 +41,7 @@ VM_ENDPOINTS = {
 }
 
 MC_ONLY_CLUSTERS = ["xa"]
-# 默认包含源站 xa + ly，以及所有已接入 VM 的目的集群
-DEFAULT_CLUSTERS = ["xa", "ly"] + [c for c in CLUSTER_ORIGINS]
+DEFAULT_CLUSTERS = list(dict.fromkeys(["xa", "ly"] + list(CLUSTER_ORIGINS.keys())))
 
 
 def _fmt_bytes(b: Optional[int]) -> str:
@@ -157,8 +156,8 @@ def _save_state(state: dict) -> None:
         pass
 
 
-def scrape_minio_metrics(url: str, bucket: str) -> tuple[Optional[int], Optional[int], list[dict]]:
-    """直接从 minio /metrics endpoint 抓取指标，返回 (objects, bytes, batch_jobs)。"""
+def scrape_minio_metrics(url: str, bucket: str) -> tuple[Optional[int], Optional[int]]:
+    """直接从 minio /metrics endpoint 抓取指标，返回 (objects, bytes)。"""
     try:
         resp = requests.get(url, timeout=15)
         resp.raise_for_status()
@@ -166,7 +165,6 @@ def scrape_minio_metrics(url: str, bucket: str) -> tuple[Optional[int], Optional
 
         objs = None
         byt = None
-        batch_jobs: dict[str, dict] = {}
 
         for line in lines:
             if line.startswith("#"):
@@ -181,31 +179,33 @@ def scrape_minio_metrics(url: str, bucket: str) -> tuple[Optional[int], Optional
             if m:
                 byt = max(byt or 0, int(m.group(1)))
                 continue
-            # minio_bucket_batch_replicate_objects
-            m = re.match(
-                rf'minio_bucket_batch_replicate_objects{{.*bucket="{bucket}".*jobId="([^"]+)".*}} (\d+)',
-                line,
-            )
-            if m:
-                job_id, count = m.group(1), int(m.group(2))
-                batch_jobs.setdefault(job_id, {"replicated": 0, "failed": 0})
-                batch_jobs[job_id]["replicated"] = count
-                continue
-            # minio_bucket_batch_replicate_objects_failed
-            m = re.match(
-                rf'minio_bucket_batch_replicate_objects_failed{{.*bucket="{bucket}".*jobId="([^"]+)".*}} (\d+)',
-                line,
-            )
-            if m:
-                job_id, count = m.group(1), int(m.group(2))
-                batch_jobs.setdefault(job_id, {"replicated": 0, "failed": 0})
-                batch_jobs[job_id]["failed"] = count
-                continue
 
-        return objs, byt, [{"jobId": j, **v} for j, v in batch_jobs.items()]
+        return objs, byt
     except Exception as e:
         print(f"[metrics {url}] 抓取失败: {e}", file=sys.stderr)
-        return None, None, []
+        return None, None
+
+
+# ── 读取 mirror job 进度文件 ─────────────────────
+PROGRESS_FILE = "tmp/minio-mirror-progress/gitlab-lfs-prod.json"
+TOTAL_PREFIXES = 256
+
+def mc_mirror_progress(cluster: str) -> tuple[int, list[str]]:
+    """读取 mirror job 进度文件，返回 (synced_count, synced_prefixes)。"""
+    endpoint = "http://oss.zzai.scnet.cn:9000"
+    real_alias = _ensure_mc_alias("ly-mirror", endpoint)
+    try:
+        p = subprocess.run(
+            ["mc", "cat", f"{real_alias}/{PROGRESS_FILE}"],
+            capture_output=True, text=True, timeout=30,
+        )
+        if p.returncode != 0:
+            return 0, []
+        data = json.loads(p.stdout)
+        prefixes = data if isinstance(data, list) else []
+        return len(prefixes), prefixes
+    except Exception:
+        return 0, []
 
 
 
@@ -285,49 +285,7 @@ def vm_bucket_download_rate(cluster: str, bucket: str, window: str = "6h") -> Op
     return total_rate if total_rate > 0 else None
 
 
-def vm_batch_replicate_object_rate(cluster: str, bucket: str, window: str = "6h") -> Optional[float]:
-    """返回 window 内所有 batch replicate 任务的总 object 速率 (objects/sec)。"""
-    results = vm_query(
-        cluster,
-        f'rate(minio_bucket_batch_replicate_objects{{bucket="{bucket}"}}[{window}])',
-    )
-    total_rate = 0.0
-    for r in results:
-        # 只统计 pod 级别的指标，避免重复计算 (job=minio vs job=minio-ks 会重复)
-        if r.get("metric", {}).get("job", "").startswith("minio-"):
-            continue
-        try:
-            v = float(r["value"][1])
-            total_rate += max(0, v)
-        except (KeyError, ValueError, IndexError, TypeError):
-            pass
-    return total_rate if total_rate > 0 else None
-
-
-def vm_batch_replicate_status(cluster: str, bucket: str) -> list[dict]:
-    """返回各 jobId 的 (replicated, failed) 计数。"""
-    repl = vm_query(
-        cluster, f'minio_bucket_batch_replicate_objects{{bucket="{bucket}"}}'
-    )
-    fail = vm_query(
-        cluster, f'minio_bucket_batch_replicate_objects_failed{{bucket="{bucket}"}}'
-    )
-    by_job: dict[str, dict] = {}
-    for r in repl:
-        job = r.get("metric", {}).get("jobId", "unknown")
-        try:
-            by_job.setdefault(job, {"replicated": 0, "failed": 0})
-            by_job[job]["replicated"] = max(0, int(float(r["value"][1])))
-        except (KeyError, ValueError, IndexError, TypeError):
-            pass
-    for r in fail:
-        job = r.get("metric", {}).get("jobId", "unknown")
-        try:
-            by_job.setdefault(job, {"replicated": 0, "failed": 0})
-            by_job[job]["failed"] = max(0, int(float(r["value"][1])))
-        except (KeyError, ValueError, IndexError, TypeError):
-            pass
-    return [{"jobId": j, **v} for j, v in by_job.items()]
+# (deleted: vm_batch_replicate_object_rate and vm_batch_replicate_status)
 
 
 # ── 采集单个集群数据 ─────────────────────────────
@@ -340,15 +298,19 @@ def fetch_cluster(cluster: str) -> dict:
         objs, byt = vm_bucket_usage(cluster, BUCKET)
         if objs is not None:
             bps = vm_bucket_bytes_rate(cluster, BUCKET, "6h")
-            obj_rate = vm_batch_replicate_object_rate(cluster, BUCKET, "6h")
-            batch = vm_batch_replicate_status(cluster, BUCKET)
             # 写入状态缓存 (用于无 VM 集群计算 delta rate)
             dl_rate = vm_bucket_download_rate(cluster, BUCKET, "6h")
+
+            # ly 集群读取 mirror job 进度
+            mirror_progress = None
+            if cluster == "ly":
+                synced, prefixes = mc_mirror_progress(cluster)
+                mirror_progress = {"synced": synced, "total": TOTAL_PREFIXES, "prefixes": prefixes}
 
             state = _load_state()
             state[cluster] = {"objects": objs, "bytes": byt, "timestamp": time.time()}
             _save_state(state)
-            info.update(objects=objs, bytes=byt, bps=bps, obj_rate=obj_rate, dl_rate=dl_rate, batch=batch)
+            info.update(objects=objs, bytes=byt, bps=bps, dl_rate=dl_rate, mirror_progress=mirror_progress)
             return info
 
     if cluster in MC_ONLY_CLUSTERS:
@@ -356,10 +318,10 @@ def fetch_cluster(cluster: str) -> dict:
         objs, byt = mc_bucket_stat(
             cluster, BUCKET, endpoint="http://221.11.21.199:9000"
         )
-        info.update(objects=objs, bytes=byt, bps=None, obj_rate=None, dl_rate=None, batch=[])
+        info.update(objects=objs, bytes=byt, bps=None, dl_rate=None, mirror_progress=None)
         return info
 
-    info.update(objects=None, bytes=None, bps=None, obj_rate=None, dl_rate=None, batch=[])
+    info.update(objects=None, bytes=None, bps=None, dl_rate=None, mirror_progress=None)
     return info
 
 
@@ -407,8 +369,8 @@ def main() -> int:
     print(f"- ly（oss.zzai.scnet.cn:9000 = 洛阳）：{_fmt_objs(ly_objs)} objects / {_fmt_bytes(ly_byt)}")
     print()
 
-    header = "| 集群 | 源 | 对象数 | 进度 | 差距 | 容量 | 下载速率(6h) | 同步速率(6h) | ETA | batch job |"
-    sep    = "|------|---|--------|------|------|------|-------------|-------------|-----|-----------|"
+    header = "| 集群 | 源 | 对象数 | 进度 | 差距 | 容量 | 下载速率(6h) | 同步速率(6h) | ETA | mirror 进度 |"
+    sep    = "|------|---|--------|------|------|------|-------------|-------------|-----|-------------|"
     print(header)
     print(sep)
 
@@ -443,9 +405,8 @@ def main() -> int:
         objs = info.get("objects")
         byt = info.get("bytes")
         bps = info.get("bps")
-        obj_rate = info.get("obj_rate")
         dl_rate = info.get("dl_rate")
-        batch = info.get("batch", [])
+        mirror_progress = info.get("mirror_progress")
 
         if objs is None:
             print(f"| **{c.upper()}** | {src_name} | ❓ | - | - | - | - | - | - | - |")
@@ -460,40 +421,38 @@ def main() -> int:
             diff = None
             gap = "N/A"
 
-        # 对象速率
-        obj_rate_str = f"{obj_rate:.1f} obj/s" if obj_rate and obj_rate > 0 else "-"
-
         # 下载速率
         dl_rate_str = _fmt_bps(dl_rate)
 
-        # ETA：基于剩余对象数和对象速率
-        eta_str = "-"
-        if obj_rate and obj_rate > 0 and diff is not None and diff > 0:
-            eta_sec = diff / obj_rate
-            if eta_sec < 3600:
-                eta_str = f"{eta_sec/60:.0f}m"
-            elif eta_sec < 86400:
-                eta_str = f"{eta_sec/3600:.1f}h"
-            else:
-                eta_str = f"{eta_sec/86400:.1f}d"
+        # 同步速率（基于下载速率估算字节写入速率）
+        sync_rate_str = _fmt_bps(bps) if bps and bps > 0 else "-"
 
-        batch_summary = "-"
-        if batch:
-            parts = []
-            for b in batch:
-                jid = b["jobId"].split(":-")[0] if ":-" in b["jobId"] else b["jobId"]
-                short = jid[-8:] if len(jid) > 8 else jid
-                rep = b.get("replicated", 0)
-                fail = b.get("failed", 0)
-                # -1 = unknown (from mc batch ls fallback, no VM)
-                if rep == -1 and fail == -1:
-                    parts.append(f"{short} (⚡ running)")
+        # ETA：基于剩余字节数和写入速率
+        eta_str = "-"
+        if bps and bps > 0 and src_byt is not None and src_byt > 0 and byt is not None:
+            remaining_bytes = src_byt - byt
+            if remaining_bytes > 0:
+                eta_sec = remaining_bytes / bps
+                if eta_sec < 3600:
+                    eta_str = f"{eta_sec/60:.0f}m"
+                elif eta_sec < 86400:
+                    eta_str = f"{eta_sec/3600:.1f}h"
                 else:
-                    parts.append(f"{short} (OK {rep:,}, fail {fail:,})")
-            batch_summary = "<br>".join(parts)
+                    eta_str = f"{eta_sec/86400:.1f}d"
+
+        # mirror job 进度
+        mirror_summary = "-"
+        if mirror_progress:
+            synced = mirror_progress["synced"]
+            total = mirror_progress["total"]
+            pct_mirror = f"{synced}/{total}"
+            if synced == total:
+                mirror_summary = f"{pct_mirror} ✅"
+            else:
+                mirror_summary = f"{pct_mirror} ⏳"
 
         print(f"| **{c.upper()}** | {src_name} | {_fmt_objs(objs)} | {pct:.2f}% | {gap} | "
-              f"{_fmt_bytes(byt)} | {dl_rate_str} | {obj_rate_str} | {eta_str} | {batch_summary} |")
+              f"{_fmt_bytes(byt)} | {dl_rate_str} | {sync_rate_str} | {eta_str} | {mirror_summary} |")
 
     print()
     return 0
