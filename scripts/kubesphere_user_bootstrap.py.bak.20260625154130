@@ -4,14 +4,14 @@ Render manifests for the default KubeSphere user bootstrap flow.
 
 Default flow:
 - username = workspace = namespace
-- global role = platform-regular  (no cluster-viewer)
+- global role = platform-regular
+- cluster role = cluster-viewer
 - workspace role = <username>-admin
 - namespace role = admin
 - granted clusters = requested clusters
-- namespace labels patched in place (ns must already exist)
+- namespace is marked as kubesphere-managed
 
-The script only renders manifests. It never creates namespaces.
-It never deletes resources.
+The script only renders manifests. It never deletes resources.
 """
 
 from __future__ import annotations
@@ -96,6 +96,32 @@ def build_workspace_template(username: str, clusters: list[str]) -> dict:
     }
 
 
+def build_cluster_role_binding(username: str) -> dict:
+    return {
+        "apiVersion": "iam.kubesphere.io/v1beta1",
+        "kind": "ClusterRoleBinding",
+        "metadata": {
+            "name": f"{username}-cluster-viewer",
+            "labels": {
+                "iam.kubesphere.io/role-ref": "cluster-viewer",
+                "iam.kubesphere.io/user-ref": username,
+            },
+        },
+        "roleRef": {
+            "apiGroup": "iam.kubesphere.io",
+            "kind": "ClusterRole",
+            "name": "cluster-viewer",
+        },
+        "subjects": [
+            {
+                "apiGroup": "iam.kubesphere.io",
+                "kind": "User",
+                "name": username,
+            }
+        ],
+    }
+
+
 def build_workspace_role_binding(username: str) -> dict:
     return {
         "apiVersion": "iam.kubesphere.io/v1beta1",
@@ -123,15 +149,19 @@ def build_workspace_role_binding(username: str) -> dict:
     }
 
 
-def build_namespace_patch(username: str) -> dict:
+def build_namespace(username: str) -> dict:
     return {
         "apiVersion": "v1",
         "kind": "Namespace",
         "metadata": {
             "name": username,
             "labels": {
+                "kubernetes.io/metadata.name": username,
                 "kubesphere.io/managed": "true",
                 "kubesphere.io/workspace": username,
+            },
+            "annotations": {
+                "kubesphere.io/creator": "admin",
             },
         },
     }
@@ -291,16 +321,8 @@ def parse_args() -> argparse.Namespace:
         description="Render manifests for the default KubeSphere user bootstrap flow."
     )
     parser.add_argument("--username", required=True, help="Username, workspace, and namespace name")
-    parser.add_argument(
-        "--email",
-        default=None,
-        help="User email. Defaults to <username>@example.com",
-    )
-    parser.add_argument(
-        "--password",
-        default=None,
-        help="Initial plaintext password. Defaults to <username>@123KS",
-    )
+    parser.add_argument("--email", required=True, help="User email")
+    parser.add_argument("--password", required=True, help="Initial plaintext password")
     parser.add_argument(
         "--cluster",
         action="append",
@@ -337,14 +359,6 @@ def parse_args() -> argparse.Namespace:
             "without Workspace ownerReferences. Use only when you have a separate adoption or rebuild plan."
         ),
     )
-    parser.add_argument(
-        "--no-namespace-labels",
-        action="store_true",
-        help=(
-            "Skip rendering the Namespace label patch document. "
-            "Useful when namespace labels are already managed externally."
-        ),
-    )
     return parser.parse_args()
 
 
@@ -354,33 +368,6 @@ def validate_args(args: argparse.Namespace) -> None:
     if args.skip_existing and not args.context:
         raise SystemExit("--context is required when --skip-existing is set")
     args.member_context_map = parse_member_context_mapping(args.member_context)
-    if args.email is None:
-        args.email = f"{args.username}@example.com"
-    if args.password is None:
-        args.password = f"{args.username}@123KS"
-
-
-def validate_namespaces_exist(args: argparse.Namespace) -> None:
-    if not args.context:
-        return
-    checked_contexts: set[str] = set()
-    missing: list[str] = []
-    for cluster in args.clusters:
-        context = args.member_context_map.get(cluster, args.context)
-        context_key = f"{cluster}:{context}"
-        if context_key in checked_contexts:
-            continue
-        checked_contexts.add(context_key)
-        namespace = kubectl_get_json(context, ["namespaces"], args.username)
-        if namespace is None:
-            missing.append(f"  {cluster} ({context}): ns/{args.username} not found")
-    if missing:
-        details = "\n".join(missing)
-        raise SystemExit(
-            "refusing to render: the following namespaces do not exist yet.\n"
-            "Please create them first, then re-run this script.\n"
-            f"{details}"
-        )
 
 
 def validate_member_namespaces(args: argparse.Namespace) -> None:
@@ -405,17 +392,17 @@ def validate_member_namespaces(args: argparse.Namespace) -> None:
 def main() -> int:
     args = parse_args()
     validate_args(args)
-    validate_namespaces_exist(args)
+    validate_member_namespaces(args)
 
     documents: list[dict] = [
         build_user(args.username, args.email, args.password, args.clusters),
         build_global_role_binding(args.username),
+        build_cluster_role_binding(args.username),
         build_workspace_template(args.username, args.clusters),
         build_workspace_role_binding(args.username),
+        build_namespace(args.username),
         build_namespace_role_binding(args.username),
     ]
-    if not args.no_namespace_labels:
-        documents.insert(-1, build_namespace_patch(args.username))
 
     if args.skip_existing:
         documents = filter_existing(args.context, documents, args.verbose)

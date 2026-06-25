@@ -52,3 +52,9 @@ alias claude='cd ~/claude && claude --dangerously-skip-permissions'
 alias codex='cd ~/codex && codex --yolo'
 alias haiku='cd ~/claude && claude --dangerously-skip-permissions --model haiku'
 alias kubectx='kubectl config use-context'
+
+export http_proxy=http://127.0.0.1:7890
+export https_proxy=http://127.0.0.1:7890
+export HTTP_PROXY=http://127.0.0.1:7890
+export HTTPS_PROXY=http://127.0.0.1:7890
+
