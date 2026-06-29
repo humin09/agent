@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from typing import Iterable
@@ -345,6 +346,14 @@ def parse_args() -> argparse.Namespace:
             "Useful when namespace labels are already managed externally."
         ),
     )
+    parser.add_argument(
+        "--no-git",
+        action="store_true",
+        help=(
+            "Skip automatic git backup of YAML to ~/sugon/ske-chart/kubesphere/user/. "
+            "Default: backup + git add + git commit."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -357,7 +366,7 @@ def validate_args(args: argparse.Namespace) -> None:
     if args.email is None:
         args.email = f"{args.username}@example.com"
     if args.password is None:
-        args.password = f"{args.username}@123KS"
+        args.password = f"{args.username[0].upper()}{args.username[1:]}@123"
 
 
 def validate_namespaces_exist(args: argparse.Namespace) -> None:
@@ -402,6 +411,25 @@ def validate_member_namespaces(args: argparse.Namespace) -> None:
         )
 
 
+def git_backup_yaml(username: str, yaml_content: str) -> None:
+    backup_dir = os.path.expanduser("~/sugon/ske-chart/kubesphere/user")
+    os.makedirs(backup_dir, exist_ok=True)
+    backup_path = os.path.join(backup_dir, f"{username}.yaml")
+    with open(backup_path, "w", encoding="utf-8") as f:
+        f.write(yaml_content)
+    repo_dir = os.path.expanduser("~/sugon/ske-chart")
+    subprocess.run(
+        ["git", "add", os.path.join("kubesphere", "user", f"{username}.yaml")],
+        cwd=repo_dir,
+        check=False,
+    )
+    subprocess.run(
+        ["git", "commit", "-m", f"kubesphere: bootstrap user {username}"],
+        cwd=repo_dir,
+        check=False,
+    )
+
+
 def main() -> int:
     args = parse_args()
     validate_args(args)
@@ -420,11 +448,30 @@ def main() -> int:
     if args.skip_existing:
         documents = filter_existing(args.context, documents, args.verbose)
 
+    yaml_output = sys.stdout
     if args.output:
-        with open(args.output, "w", encoding="utf-8") as handle:
-            render_documents(documents, handle)
-    else:
-        render_documents(documents, sys.stdout)
+        yaml_output = open(args.output, "w", encoding="utf-8")
+
+    render_documents(documents, yaml_output)
+    yaml_output.close() if hasattr(yaml_output, "close") else None
+
+    if not args.no_git:
+        backup_dir = os.path.expanduser("~/sugon/ske-chart/kubesphere/user")
+        os.makedirs(backup_dir, exist_ok=True)
+        backup_path = os.path.join(backup_dir, f"{args.username}.yaml")
+        with open(backup_path, "w", encoding="utf-8") as f:
+            render_documents(documents, f)
+        repo_dir = os.path.expanduser("~/sugon/ske-chart")
+        subprocess.run(
+            ["git", "add", os.path.join("kubesphere", "user", f"{args.username}.yaml")],
+            cwd=repo_dir,
+            check=False,
+        )
+        subprocess.run(
+            ["git", "commit", "-m", f"kubesphere: bootstrap user {args.username}"],
+            cwd=repo_dir,
+            check=False,
+        )
 
     return 0
 

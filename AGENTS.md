@@ -107,7 +107,7 @@ globs: ["**/*"]
 | `bj` | 北京 | 测试 |
 | `sh` | 上海 | 测试 |
 | `ly` | 洛阳 | 测试 |
-| `tx` | 腾讯 | 生产 |
+| `xa` | 西安 | 测试 |
 
 生产集群：`ks`、`qd`、`dz`、`zz`、`ny`、`wh`、`sz`、`wq`、`tx`.
 
@@ -148,7 +148,8 @@ globs: ["**/*"]
 | 魏桥 | `https://<app>.sd5ai.scnet.cn:58043` |
 | 武汉 | `https://<app>.whai.scnet.cn:58043` |
 | 纽约 | `https://<app>.zzai.scnet.ai:58043` |
-
+| 西安 | `https://<app>.xaai.scnet.ai:58043` |
+| 洛阳 | `https://<app>.zzai.scnet.ai:58043` |
 HTTP 端口改为 `58000`.常见 app：`ingress`、`vm`、`vl`、模型服务名.
 
 ## 6. 组件与配置仓库
@@ -197,7 +198,7 @@ HTTP 端口改为 `58000`.常见 app：`ingress`、`vm`、`vl`、模型服务名
 | `multipoint-scheduler` | `ske` | `~/sugon/ske-chart/multipoint-scheduler` |
 | `volcano` | `volcano-system` | `~/sugon/ske-chart/volcano` |
 | `kubesphere` | `kubesphere-system` | `~/sugon/ske-chart/kubesphere` |
-| `minio-server` | `ske` | `~/sugon/ske-chart/minio-server`（含 gitlab-lfs-prod batch replicate 配置）|
+| `minio-server` | `ske` | `~/sugon/ske-chart/minio-server`|
 | `alert` | `ske` | `~/sugon/ske-chart/alert` |
 | `ex-lb` | 节点部署 | `~/sugon/ske-chart/ex-lb` |
 | `http-proxy` | `ske` + `ske-model` | `~/sugon/ske-chart/http-proxy` |
