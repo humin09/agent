@@ -135,7 +135,7 @@ globs: ["**/*"]
 - 线上内网 Harbor：`image.ac.com:5000/k8s/<image>:<tag>`
 - 源站 Harbor：`image.sourcefind.cn:5000/k8s/<image>:<tag>`
 - 禁止线上使用 `docker.io` / `ghcr.io` / `quay.io`.
-- 测试工具镜像：`image.ac.com:5000/k8s/maas-test:v1`、`image.ac.com:5000/k8s/netshoot`.
+- 测试工具镜像：`image.ac.com:5000/k8s/ske-tool:v1`、`image.ac.com:5000/k8s/netshoot`.
 
 公网入口模板：
 
@@ -279,18 +279,18 @@ NotReady 或已 Cordon 节点：先找 `kubeasz=true` 节点，再通过 `node-s
 
 ### 7.5 镜像构建与同步
 
-镜像构建、拉取、重打 tag、推送统一通过 `ske-model` 命名空间下 `docker-tmp` DaemonSet.
+镜像构建、拉取、重打 tag、推送统一通过 `ske-model` 命名空间下 `ske-tool` DaemonSet.
 
 #### 构建
 
-- 查询构建 Pod：`kubectl --context <ctx> -n ske-model get pod -l app=docker-tmp -o wide`
-- 拷贝 Dockerfile 到构建 Pod：`kubectl --context <ctx> -n ske-model cp /local/path/Dockerfile <docker-tmp-pod>:/tmp/build/`
-- 拷贝源码到构建 Pod：`kubectl --context <ctx> -n ske-model cp /local/path/source <docker-tmp-pod>:/tmp/build/`
-- 构建并推送源站镜像：`kubectl --context <ctx> -n ske-model exec <docker-tmp-pod> -- sh -c 'cd /tmp/build && docker build -t image.sourcefind.cn:5000/k8s/<image>:<tag> . && docker push image.sourcefind.cn:5000/k8s/<image>:<tag>'`
+- 查询构建 Pod：`kubectl --context <ctx> -n ske-model get pod -l app=ske-tool -o wide`
+- 拷贝 Dockerfile 到构建 Pod：`kubectl --context <ctx> -n ske-model cp /local/path/Dockerfile <ske-tool-pod>:/tmp/build/`
+- 拷贝源码到构建 Pod：`kubectl --context <ctx> -n ske-model cp /local/path/source <ske-tool-pod>:/tmp/build/`
+- 构建并推送源站镜像：`kubectl --context <ctx> -n ske-model exec <ske-tool-pod> -- sh -c 'cd /tmp/build && docker build -t image.sourcefind.cn:5000/k8s/<image>:<tag> . && docker push image.sourcefind.cn:5000/k8s/<image>:<tag>'`
 
 #### 同步到目标集群
 
-- 同步源站镜像到目标集群内网 Harbor：`kubectl --context <ctx> -n ske-model exec <docker-tmp-pod> -- sh -c 'docker pull image.sourcefind.cn:5000/k8s/<image>:<tag> && docker tag image.sourcefind.cn:5000/k8s/<image>:<tag> image.ac.com:5000/k8s/<image>:<tag> && docker push image.ac.com:5000/k8s/<image>:<tag>'`
+- 同步源站镜像到目标集群内网 Harbor：`kubectl --context <ctx> -n ske-model exec <ske-tool-pod> -- sh -c 'docker pull image.sourcefind.cn:5000/k8s/<image>:<tag> && docker tag image.sourcefind.cn:5000/k8s/<image>:<tag> image.ac.com:5000/k8s/<image>:<tag> && docker push image.ac.com:5000/k8s/<image>:<tag>'`
 
 ### 7.6 MAAS 模型服务
 
@@ -304,7 +304,7 @@ NotReady 或已 Cordon 节点：先找 `kubeasz=true` 节点，再通过 `node-s
 
 #### 下载模型
 
-- 在 maas-test Pod 内下载模型：`kubectl --context <ctx> -n ske-model exec <maas-test-pod> -- sh -c 'cd <target_dir> && python -m modelscope.cli.download <model_name>'`
+- 在 ske-tool Pod 内下载模型：`kubectl --context <ctx> -n ske-model exec <ske-tool-pod> -- sh -c 'cd <target_dir> && python -m modelscope.cli.download <model_name>'`
 
 #### 压测模型
 
