@@ -108,6 +108,7 @@ globs: ["**/*"]
 | `sh` | 上海 | 测试 |
 | `ly` | 洛阳 | 测试 |
 | `xa` | 西安 | 测试 |
+| `bs` | 璧山 | 测试 |
 
 生产集群：`ks`、`qd`、`dz`、`zz`、`ny`、`wh`、`sz`、`wq`、`tx`.
 
@@ -150,6 +151,9 @@ globs: ["**/*"]
 | 纽约 | `https://<app>.zzai.scnet.ai:58043` |
 | 西安 | `https://<app>.xaai.scnet.ai:58043` |
 | 洛阳 | `https://<app>.zzai.scnet.ai:58043` |
+| 北京 | `https://<app>.sugon-bj.xyz:58043` |
+| 上海 | `https://<app>.sugon-sh.xyz:58043` |
+| 璧山 | `https://<app>.sugon-bs.xyz:58043` |  
 HTTP 端口改为 `58000`.常见 app：`ingress`、`vm`、`vl`、模型服务名.
 
 ## 6. 组件与配置仓库
@@ -201,6 +205,7 @@ HTTP 端口改为 `58000`.常见 app：`ingress`、`vm`、`vl`、模型服务名
 | `minio-server` | `ske` | `~/sugon/ske-chart/minio-server`|
 | `alert` | `ske` | `~/sugon/ske-chart/alert` |
 | `ex-lb` | 节点部署 | `~/sugon/ske-chart/ex-lb` |
+| `coredns` | `kube-system` | `~/sugon/ske-chart/coredns` |
 | `http-proxy` | `ske` + `ske-model` | `~/sugon/ske-chart/http-proxy` |
 | `maas` | `ske-model` | `~/sugon/ske-chart/maas` |
 | `npu-device-plugin` | `ske` | `~/sugon/ske-chart/npu-device-plugin` |

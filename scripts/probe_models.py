@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import urllib.error
 import urllib.request
@@ -270,13 +271,71 @@ def build_service_records(deployments, services, ingresses, endpoints, pods):
     return records
 
 
+def is_ske_local(name, labels=None):
+    name = name or ""
+    if "ske-local" in name:
+        return True
+    if labels:
+        for value in labels.values():
+            if "ske-local" in str(value):
+                return True
+    return False
+
+
+def merge_smg_children(records):
+    parents = {}
+    for record in records:
+        if not record["name"].endswith("-smg") or not record["hosts"]:
+            continue
+        base = record["name"][:-4]
+        parents.setdefault(record["name"], {"base": base, "record": record})
+
+    if not parents:
+        return records
+
+    merged = set()
+    for parent_name, info in parents.items():
+        base = info["base"]
+        parent = info["record"]
+        pattern = re.compile(rf"^{re.escape(base)}-(prefill|decode)-\d+(?:-.*)?$")
+        for record in records:
+            if not record["name"].startswith(base) or not pattern.match(record["name"]):
+                continue
+            if record.get("hosts"):
+                continue
+            parent["replicas"] += record["replicas"]
+            parent["available"] += record["available"]
+            parent["deployment_names"].extend(record["deployment_names"])
+            parent.setdefault("hosts", [])
+            for host in record.get("hosts", []):
+                if host not in parent["hosts"]:
+                    parent["hosts"].append(host)
+            merged.add(record["name"])
+
+    return [
+        record
+        for record in records
+        if record["name"] not in merged
+    ]
+
+
 def collect_cluster_data(cluster):
     resources = get_k8s_resources(cluster["context"], cluster["namespace"])
     if not resources:
         return {"records": []}
 
+    resources["items"] = [
+        item
+        for item in resources.get("items", [])
+        if not is_ske_local(
+            item.get("metadata", {}).get("name"),
+            item.get("metadata", {}).get("labels"),
+        )
+    ]
+
     deployments, services, ingresses, endpoints, pods = parse_resources(resources)
     records = build_service_records(deployments, services, ingresses, endpoints, pods)
+    records = merge_smg_children(records)
     return {"records": records}
 
 
