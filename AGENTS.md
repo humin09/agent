@@ -94,33 +94,28 @@ globs: ["**/*"]
 
 ## 5. 集群速查
 
-| context | 城市 | 环境 |
-|---|---|---|
-| `ks` | 昆山 | 生产 |
-| `dz` | 达州 | 生产 |
-| `qd` | 青岛 | 生产 |
-| `wh` | 武汉 | 生产 |
-| `sz` | 深圳 | 生产 |
-| `zz` | 郑州 | 生产 |
-| `ny` | 纽约 | 生产 |
-| `wq` | 魏桥 | 生产 |
-| `bj` | 北京 | 测试 |
-| `sh` | 上海 | 测试 |
-| `ly` | 洛阳 | 测试 |
-| `xa` | 西安 | 测试 |
-| `bs` | 璧山 | 测试 |
+| context | 城市 | 环境 | ex-lb vip | ex-lb地址 |
+|---|---|---|---|---|
+| `ks` | 昆山 | 生产 | 10.15.200.50 | `https://<app>.ksai.scnet.cn:58043` |
+| `dz` | 达州 | 生产 | 192.168.114.201 | `https://<app>.dzai.scnet.cn:58043` |
+| `qd` | 青岛 | 生产 | 10.28.4.204 | `https://<app>.qdai.scnet.cn:58043` |
+| `wh` | 武汉 | 生产 | 10.100.2.24 | `https://<app>.whai.scnet.cn:58043` |
+| `sz` | 深圳 | 生产 | 192.168.0.206 | `https://<app>.szai.scnet.cn:58043` |
+| `zz` | 郑州 | 生产 | 172.20.13.202 | `https://<app>.zzai.scnet.cn:58043` |
+| `ny` | 纽约 | 生产 | 10.4.17.5 | `https://<app>.zzai.scnet.ai:58043` |
+| `wq` | 魏桥 | 生产 | 172.18.18.18 | `https://<app>.sd5ai.scnet.cn:58043` |
+| `bj` | 北京 | 测试 | 10.0.31.15 | `https://<app>.sugon-bj.xyz:58043` |
+| `sh` | 上海 | 测试 | 10.16.5.1 | `https://<app>.sugon-sh.xyz:58043` |
+| `ly` | 洛阳 | 测试 | 172.20.13.202 | `https://<app>.zzai.scnet.ai:58043` |
+| `xa` | 西安 | 测试 | - | `https://<app>.xaai.scnet.ai:58043` |
+| `bs` | 璧山 | 测试 | 10.32.0.11 | `https://<app>.sugon-bs.xyz:58043` |
 
-生产集群：`ks`、`qd`、`dz`、`zz`、`ny`、`wh`、`sz`、`wq`、`tx`.
+端口说明：
+- `58043`: HTTPS ingress 入口，常见 app：`minio`、`vm`、`vl ingress` 等
+- `58000`: HTTP MAAS ingress 地址
+- `9000`: minio 地址
 
-**ly 与 zz 的关系**（共享基础设施）：
 
-- `ly`（洛阳）和 `zz`（郑州）是同一个物理集群的两个 context，共用：
-  - **ex-lb**（公网入口，如 `oss.zzai.scnet.cn`、`vm.zzai.scnet.cn` 都跑在郑州 ex-lb 节点上）
-  - **minio**（ly 的 minio 服务 `http://oss.zzai.scnet.cn:9000` 实际是 zz 节点的 ex-lb 转发）
-  - **vm** / **vl**（VictoriaMetrics / VictoriaLogs）
-  - **http-proxy** / **gitlab**
-- `kubectl --context ly` 和 `--context zz` 连的是不同的 K8s API server，但集群内的 Pod 和服务是共享的
-- **注意**：ly minio 的 Pod 监控数据未上报到共享 VM（`vm.zzai.scnet.cn`），因为其 servicemonitor 未启用；需要用 `scrape_minio_metrics()` 从 http endpoint 直接抓取
 
 平台基线：
 
@@ -137,24 +132,7 @@ globs: ["**/*"]
 - 禁止线上使用 `docker.io` / `ghcr.io` / `quay.io`.
 - 测试工具镜像：`image.ac.com:5000/k8s/ske-tool:v1`、`image.ac.com:5000/k8s/netshoot`.
 
-公网入口模板：
 
-| 城市 | HTTPS 模板 |
-|---|---|
-| 昆山 | `https://<app>.ksai.scnet.cn:58043` |
-| 郑州 | `https://<app>.zzai.scnet.cn:58043` |
-| 达州 | `https://<app>.dzai.scnet.cn:58043` |
-| 青岛 | `https://<app>.qdai.scnet.cn:58043` |
-| 深圳 | `https://<app>.szai.scnet.cn:58043` |
-| 魏桥 | `https://<app>.sd5ai.scnet.cn:58043` |
-| 武汉 | `https://<app>.whai.scnet.cn:58043` |
-| 纽约 | `https://<app>.zzai.scnet.ai:58043` |
-| 西安 | `https://<app>.xaai.scnet.ai:58043` |
-| 洛阳 | `https://<app>.zzai.scnet.ai:58043` |
-| 北京 | `https://<app>.sugon-bj.xyz:58043` |
-| 上海 | `https://<app>.sugon-sh.xyz:58043` |
-| 璧山 | `https://<app>.sugon-bs.xyz:58043` |  
-HTTP 端口改为 `58000`.常见 app：`ingress`、`vm`、`vl`、模型服务名.
 
 ## 6. 组件与配置仓库
 
