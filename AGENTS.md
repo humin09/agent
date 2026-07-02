@@ -74,9 +74,8 @@ globs: ["**/*"]
 - 禁止直接 SSH 到集群节点.
 - 节点登录优先使用：`kubectl node-shell --context <ctx> <node_ip> [-- <command>]`.
 - 只有目标节点 `NotReady` 或已 `Cordon` 时，才允许通过 `kubeasz=true` 节点作为 SSH 跳板.
-- 从节点访问外网时，除 `wh` 外默认必须显式设置 `http_proxy` / `https_proxy`；未确认代理前，不得假设节点能直连外网.
+- 通过node-shell进入节点后是特权容器, 在生产环境节点执行任何非只读操作, 都需要确认.
 
-节点外网代理模板：`export http_proxy=http://<user>:<pass>@<proxy_ip>:<port>; export https_proxy=$http_proxy`
 
 ## 4. 变更前确认模板
 
@@ -163,32 +162,6 @@ globs: ["**/*"]
 - `resourcegroups` | `kube-system` | `~/sugon/ske-chart/resourcegroups`
 - `servicemonitor` | `ske` | `~/sugon/ske-chart/servicemonitor`
 
-线上部署变更后，按下方表格定位本地配置并回写:
-
-| 组件 | namespace | 本地路径 |
-|---|---|---|
-| `ingress` | `ske` | `~/sugon/ske-chart/nginx-ingress-controller` |
-| `admission-controller` | `ske` | `~/sugon/ske-chart/admission-controller` |
-| `dnsmasq-client` | `ske` | `~/sugon/ske-chart/dnsmasq-client` |
-| `dnsmasq-server` | `ske` | `~/sugon/ske-chart/dnsmasq-server` |
-| `keda` | `ske` | `~/sugon/ske-chart/keda` |
-| `victoria-logs` | `ske` | `~/sugon/ske-chart/victoria-logs` |
-| `victoria-metrics` | `ske` | `~/sugon/ske-chart/victoria-metrics` |
-| `kyverno` | `ske` | `~/sugon/ske-chart/kyverno` |
-| `resource-operator` | `ske` | `~/sugon/ske-chart/resource-operator` |
-| `notebook-controller` | `ske` | `~/sugon/ske-chart/notebook-controller` |
-| `multipoint-scheduler` | `ske` | `~/sugon/ske-chart/multipoint-scheduler` |
-| `volcano` | `volcano-system` | `~/sugon/ske-chart/volcano` |
-| `kubesphere` | `kubesphere-system` | `~/sugon/ske-chart/kubesphere` |
-| `minio-server` | `ske` | `~/sugon/ske-chart/minio-server`|
-| `alert` | `ske` | `~/sugon/ske-chart/alert` |
-| `ex-lb` | 节点部署 | `~/sugon/ske-chart/ex-lb` |
-| `coredns` | `kube-system` | `~/sugon/ske-chart/coredns` |
-| `http-proxy` | `ske` + `ske-model` | `~/sugon/ske-chart/http-proxy` |
-| `maas` | `ske-model` | `~/sugon/ske-chart/maas` |
-| `npu-device-plugin` | `ske` | `~/sugon/ske-chart/npu-device-plugin` |
-| `resourcegroups` | `kube-system` | `~/sugon/ske-chart/resourcegroups` |
-| `servicemonitor` | `ske` | `~/sugon/ske-chart/servicemonitor` |
 
 ## 7. 任务路由
 

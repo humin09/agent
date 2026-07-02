@@ -1,0 +1,119 @@
+{
+  "sh": {
+    "vip": "10.16.5.1",
+    "domain": "sugon-sh.xyz",
+    "port": 58043,
+    "vm_local": "10.16.5.1",
+    "image_ac": "10.16.5.2",
+    "wildcard_ip": "10.16.5.1",
+    "ex_lb_nodes": ["10.16.5.1"]
+  },
+  "dz": {
+    "vip": "192.168.114.201",
+    "domain": "dzai.scnet.cn",
+    "port": 58043,
+    "vm_local": "10.1.100.106",
+    "image_ac": "11.1.100.110",
+    "wildcard_ip": "10.1.114.201",
+    "ex_lb_nodes": ["10.1.114.2", "10.1.114.3"]
+  },
+  "qd": {
+    "vip": "10.28.4.204",
+    "domain": "qdai.scnet.cn",
+    "port": 58043,
+    "vm_local": "10.1.4.211",
+    "image_ac": "12.1.4.202",
+    "wildcard_ip": "10.28.4.204",
+    "ex_lb_nodes": ["10.1.4.11", "10.1.4.12"]
+  },
+  "wh": {
+    "vip": "10.100.2.24",
+    "domain": "whai.scnet.cn",
+    "port": 58043,
+    "vm_local": "10.10.1.107",
+    "image_ac": "11.10.1.101",
+    "wildcard_ip": "10.100.2.24",
+    "ex_lb_nodes": ["10.10.2.21", "10.10.2.22"]
+  },
+  "sz": {
+    "vip": "192.168.0.206",
+    "domain": "szai.scnet.cn",
+    "port": 58043,
+    "vm_local": "192.168.0.224",
+    "image_ac": "192.168.0.203",
+    "wildcard_ip": "192.168.0.206",
+    "ex_lb_nodes": ["192.168.0.199", "192.168.0.200"]
+  },
+  "ks": {
+    "vip": "10.15.200.50",
+    "domain": "ksai.scnet.cn",
+    "port": 58043,
+    "vm_local": "10.15.100.158",
+    "image_ac": "11.15.100.75",
+    "wildcard_ip": "10.15.200.50",
+    "ex_lb_nodes": ["10.15.200.11", "10.15.200.12"]
+  },
+  "zz": {
+    "vip": "172.20.13.202",
+    "domain": "zzai.scnet.cn",
+    "port": 58043,
+    "vm_local": "10.13.17.213",
+    "image_ac": "10.13.17.207",
+    "wildcard_ip": "172.20.13.202",
+    "ex_lb_nodes": ["172.20.13.1", "172.20.13.2"]
+  },
+  "ny": {
+    "vip": "10.4.17.5",
+    "domain": "zzai.scnet.ai",
+    "port": 58043,
+    "vm_local": "10.4.17.5",
+    "image_ac": "10.1.17.7",
+    "wildcard_ip": "10.4.17.5",
+    "ex_lb_nodes": ["10.4.0.1"]
+  },
+  "wq": {
+    "vip": "172.18.18.18",
+    "domain": "sd5ai.scnet.cn",
+    "port": 58043,
+    "vm_local": "10.10.1.212",
+    "image_ac": "10.10.1.202",
+    "wildcard_ip": "172.18.18.18",
+    "ex_lb_nodes": ["10.10.1.5", "10.10.1.6"]
+  },
+  "bj": {
+    "vip": "10.0.31.15",
+    "domain": "sugon-bj.xyz",
+    "port": 58043,
+    "vm_local": "10.0.31.15",
+    "image_ac": "10.0.31.2",
+    "wildcard_ip": "10.0.31.15",
+    "ex_lb_nodes": ["10.0.31.15"]
+  },
+  "ly": {
+    "vip": "172.20.13.202",
+    "domain": "zzai.scnet.ai",
+    "port": 58043,
+    "vm_local": "172.20.13.202",
+    "image_ac": "172.20.13.202",
+    "wildcard_ip": "172.20.13.202",
+    "ex_lb_nodes": ["10.13.17.37", "10.13.17.38"]
+  },
+  "xa": {
+    "vip": null,
+    "domain": "xaai.scnet.ai",
+    "port": 58043,
+    "vm_local": null,
+    "image_ac": null,
+    "wildcard_ip": null,
+    "ex_lb_nodes": ["10.13.5.127", "10.13.5.164"]
+  },
+  "bs": {
+    "vip": "10.32.0.11",
+    "domain": "sugon-bs.xyz",
+    "port": 58043,
+    "vm_local": "10.32.0.16",
+    "image_ac": "10.32.0.2",
+    "wildcard_ip": "10.32.0.11",
+    "ex_lb_nodes": ["10.32.0.1"]
+  }
+}
