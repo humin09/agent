@@ -23,9 +23,15 @@ globs: ["**/*"]
 
 - Agentic 编程优先使用 Python.
 - Python 包管理与执行统一使用 `uv`，禁止直接使用 `pip`.
-- 网页检索或浏览器自动化优先使用 Chrome.
+- 网页检索或浏览器自动化优先使用 Playright+Chrome.
 - 本地文档优先 Markdown；远端文档优先用 `lark-cli` 生成飞书文档.
-- 更新技能：`python ~/agent/scripts/skill_update.py`.
+- 画流程图用 `d2` 或者 `mermaid-cli`
+- PPT 创建/编辑用 `python-pptx`或者写好markdown后用 `marp-cli` 编译成ppt
+- Word 用 `python-docx`
+- Excel 用 `openpyxl`+`pandas`
+- Office 转 Markdown：`uv run markitdown <file> -o <out.md>`
+- PPT 嵌入图表：先用 `d2` 生成 `.svg`/`.png`，再用 `python-pptx` 插入
+
 
 ## 2. 高风险操作必须确认
 
@@ -53,7 +59,7 @@ globs: ["**/*"]
 免确认：执行 `~/agent` 下的本地脚本，例如 `python ~/agent/scripts/xxx.py`、`uv run ~/agent/...`.
 
 ### 2.3 K8s / 容器 / 系统变更
-
+- `helm upgrade/rollback`
 - `kubectl apply|create|replace|delete|edit|patch`
 - `kubectl scale|rollout|set`
 - `kubectl label|annotate`
@@ -68,28 +74,29 @@ globs: ["**/*"]
 
 ## 3. K8s 硬约束
 
-- 所有 `kubectl` 命令必须显式带 `--context <ctx>`（tx 集群除外）.
-- 需要命名空间时，必须显式带 `-n <namespace>`.
+- 所有 `kubectl` 命令必须显式带 `--context <ctx>`, 需要命名空间时，必须显式带 `-n <namespace>`.
 - 禁止使用 `kubectl config use-context` 和 `kubectl config set-context` 修改全局上下文.
-- 禁止直接 SSH 到集群节点.
-- 节点登录优先使用：`kubectl node-shell --context <ctx> <node_ip> [-- <command>]`.
-- 只有目标节点 `NotReady` 或已 `Cordon` 时，才允许通过 `kubeasz=true` 节点作为 SSH 跳板.
+- 节点登录优先使用：`kubectl node-shell --context <ctx> <node_ip> [-- <command>]`. 只有目标节点 `NotReady` 或已 `Cordon` 时，才允许通过 `kubeasz=true` 节点作为 SSH 跳板.
 - 通过node-shell进入节点后是特权容器, 在生产环境节点执行任何非只读操作, 都需要确认.
 
 
-## 4. 变更前确认模板
+## 4. K8S线上(生成)变更规范
+- ⚠️ **该规范适用于所有线上k8s集群**.
+- ⚠️ **升级严禁全部升级, 应该每个集群逐步升级, 升级执行前需要用户确认**.
+- ⚠️ **升级优先基于helm升级, 按下列模板生成升级计划, 回滚也是基于计划回滚**.
+    ```yaml
+    准备执行变更命令：`<完整命令>`, 优先使用helm升级和回滚, 记录好版本
 
-所有线上变更命令执行前，按此格式输出并等待确认：
+    影响范围：
 
-准备执行变更命令：`<完整命令>`
+    - context: `<ctx>`
+    - namespace: `<ns>`
+    - resource: `<kind/name>`
+    - expected impact: `<impact>`
+    - rollback: `<rollback plan>`
+    ```
+- ⚠️ **升级和回滚一定是基于上面的计划执行, 如果升级有任何不符合预期的问题, 需要用户确认才执行额外的动作,只读操作除外**.
 
-影响范围：
-
-- context: `<ctx>`
-- namespace: `<ns>`
-- resource: `<kind/name>`
-- expected impact: `<impact>`
-- rollback: `<rollback plan>`
 
 ## 5. 集群速查
 

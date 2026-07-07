@@ -23,7 +23,7 @@ CLUSTERS = [
 MAX_PROBE_WORKERS = 6
 LIVENESS_TIMEOUT_SECONDS = 6
 PROBE_TIMEOUT_SECONDS = 60
-PROTOCOLS = ["chat_completions", "responses", "anthropic_messages"]
+PROTOCOLS = ["chat_completions", "responses", "anthropic_messages", "images_generations"]
 CAPABILITY_KEYS = [
     "basic",
     "stream",
@@ -68,6 +68,10 @@ def is_subset(expected, actual):
     if not expected:
         return False
     return all(actual.get(k) == v for k, v in expected.items())
+
+
+def is_image_model(name: str) -> bool:
+    return "image" in name.lower()
 
 
 def base_name(host):
@@ -371,6 +375,8 @@ def probe_service(
         results["responses"] = probe_protocol(args, "/v1/responses", "responses", headers)
     if "anthropic_messages" in protocols:
         results["anthropic_messages"] = probe_protocol(args, "/v1/messages", "anthropic", headers)
+    if "images_generations" in protocols and is_image_model(model):
+        results["images_generations"] = probe_images_generations(args, headers)
     return {
         "type": "probe",
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -380,6 +386,7 @@ def probe_service(
             "chat_completions_supported": bool(results.get("chat_completions", {}).get("supported")),
             "responses_supported": bool(results.get("responses", {}).get("supported")),
             "anthropic_messages_supported": bool(results.get("anthropic_messages", {}).get("supported")),
+            "images_generations_supported": bool(results.get("images_generations", {}).get("supported")),
         },
         "protocols": results,
     }
@@ -456,6 +463,39 @@ def probe_protocol(args: dict[str, Any], endpoint: str, kind: str, headers: dict
         errors.append({"capability": "error_format", **classify_error(err_result)})
 
     return protocol_result(endpoint, True, basic.get("status_code"), capabilities, tests, errors)
+
+
+def probe_images_generations(args: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:
+    endpoint = "/v1/images/generations"
+    url = base_url(args) + endpoint
+    print(f"[probe] Testing images generations: {url}")
+
+    payload = {
+        "model": args["model"],
+        "prompt": "a tiny ceramic teapot on a wooden table, product photo",
+        "negative_prompt": "low quality, blurry",
+        "size": "512x512",
+        "n": 1,
+        "response_format": "b64_json",
+        "num_inference_steps": 50,
+        "true_cfg_scale": 4.0,
+        "seed": 2468,
+    }
+    result = post_json(url, payload, args["request_timeout_seconds"], headers)
+    supported = result.get("ok") and bool(result.get("json"))
+    has_data = False
+    if supported and isinstance(result.get("json"), dict):
+        has_data = "data" in result["json"] and len(result["json"]["data"]) > 0
+
+    capabilities = {key: False for key in CAPABILITY_KEYS}
+    capabilities["basic"] = has_data
+
+    tests = {name: skipped_test(name, {}, "not applicable") for name in TEST_KEYS if name != "basic"}
+    tests["basic"] = non_stream_test("basic", payload, result, has_data)
+
+    log_capability("images generation", has_data, result)
+
+    return protocol_result(endpoint, has_data, result.get("status_code"), capabilities, tests, [])
 
 
 def base_url(args: dict[str, Any]) -> str:
@@ -932,6 +972,7 @@ PROTOCOL_LABELS = {
     "chat_completions": "OpenAI Chat Completions",
     "responses": "OpenAI Responses",
     "anthropic_messages": "Anthropic Messages",
+    "images_generations": "OpenAI Images Generations",
 }
 CAPABILITY_COLUMNS = [
     ("basic", "basic"),
@@ -952,8 +993,8 @@ def render_markdown(all_models, region_groups):
     md = ""
     md += "# 模型服务信息\n\n"
     md += "## 模型总览\n\n"
-    md += "| 模型 | 集群 | Chat | Responses | Anthropic | 副本数 |\n"
-    md += "|------|------|------|-----------|-----------|--------|\n"
+    md += "| 模型 | 集群 | Chat | Responses | Anthropic | Images | 副本数 |\n"
+    md += "|------|------|------|-----------|-----------|--------|--------|\n"
 
     for region in sorted(region_groups.keys()):
         for model_name, model_info in sorted(region_groups[region], key=lambda x: x[0]):
@@ -961,7 +1002,8 @@ def render_markdown(all_models, region_groups):
             chat = "✅" if protocol_status.get("chat_completions", {}).get("supported") else "❌"
             responses = "✅" if protocol_status.get("responses", {}).get("supported") else "❌"
             anthropic = "✅" if protocol_status.get("anthropic_messages", {}).get("supported") else "❌"
-            md += f"| {model_name} | {model_info.get('region', region)} | {chat} | {responses} | {anthropic} | {model_info['replicas']} |\n"
+            images = "✅" if protocol_status.get("images_generations", {}).get("supported") else ("❌" if "images_generations" in protocol_status else "-")
+            md += f"| {model_name} | {model_info.get('region', region)} | {chat} | {responses} | {anthropic} | {images} | {model_info['replicas']} |\n"
 
     for model_name in sorted(all_models.keys()):
         model_info = all_models[model_name]
@@ -971,7 +1013,8 @@ def render_markdown(all_models, region_groups):
         chat = "✅" if protocol_status.get("chat_completions", {}).get("supported") else "❌"
         responses = "✅" if protocol_status.get("responses", {}).get("supported") else "❌"
         anthropic = "✅" if protocol_status.get("anthropic_messages", {}).get("supported") else "❌"
-        md += f"| {model_name} | - | {chat} | {responses} | {anthropic} | {model_info['replicas']} |\n"
+        images = "✅" if protocol_status.get("images_generations", {}).get("supported") else ("❌" if "images_generations" in protocol_status else "-")
+        md += f"| {model_name} | - | {chat} | {responses} | {anthropic} | {images} | {model_info['replicas']} |\n"
 
     md += "\n"
 
@@ -1000,6 +1043,8 @@ def render_markdown(all_models, region_groups):
             md += "| " + " | ".join(header) + " |\n"
             md += "|" + "|".join("---" for _ in header) + "|\n"
             for protocol in PROTOCOLS:
+                if protocol not in protocol_status:
+                    continue
                 item = protocol_status.get(protocol, {})
                 caps = item.get("capabilities", {})
                 status_code = item.get("status_code")
@@ -1013,40 +1058,56 @@ def render_markdown(all_models, region_groups):
             md += "\n"
 
             if first_model:
-                md += "请求示例:\n"
-                md += "```bash\n"
-                md += f"curl -X POST '{probe['url_prefix']}/v1/chat/completions' \\\n"
-                md += "  -H 'Content-Type: application/json' \\\n"
-                md += "  -d '{\n"
-                md += f'    "model": "{first_model}",\n'
-                md += '    "messages": [{"role": "user", "content": "你好"}],\n'
-                md += '    "temperature": 0.7,\n'
-                md += '    "stream": false\n'
-                md += "  }'\n"
-                md += "```\n"
-
-                if protocol_status.get("responses", {}).get("supported"):
-                    md += "OpenAI Responses 示例:\n"
+                if protocol_status.get("images_generations", {}).get("supported"):
+                    md += "请求示例（文生图）:\n"
                     md += "```bash\n"
-                    md += f"curl -X POST '{probe['url_prefix']}/v1/responses' \\\n"
+                    md += f"curl -sS -X POST '{probe['url_prefix']}/v1/images/generations' \\\n"
                     md += "  -H 'Content-Type: application/json' \\\n"
                     md += "  -d '{\n"
                     md += f'    "model": "{first_model}",\n'
-                    md += '    "input": "你好，请用一句话介绍你自己",\n'
-                    md += '    "max_output_tokens": 128\n'
+                    md += '    "prompt": "a tiny ceramic teapot on a wooden table, product photo",\n'
+                    md += '    "negative_prompt": "low quality, blurry",\n'
+                    md += '    "size": "512x512",\n'
+                    md += '    "n": 1,\n'
+                    md += '    "response_format": "b64_json"\n'
                     md += "  }'\n"
                     md += "```\n"
-                    if protocol_status.get("responses", {}).get("tests", {}).get("prefix_cache_usage", {}).get("supported"):
-                        md += "OpenAI Responses 前缀缓存示例:\n"
+                else:
+                    if protocol_status.get("chat_completions", {}).get("supported"):
+                        md += "请求示例:\n"
+                        md += "```bash\n"
+                        md += f"curl -X POST '{probe['url_prefix']}/v1/chat/completions' \\\n"
+                        md += "  -H 'Content-Type: application/json' \\\n"
+                        md += "  -d '{\n"
+                        md += f'    "model": "{first_model}",\n'
+                        md += '    "messages": [{"role": "user", "content": "你好"}],\n'
+                        md += '    "temperature": 0.7,\n'
+                        md += '    "stream": false\n'
+                        md += "  }'\n"
+                        md += "```\n"
+
+                    if protocol_status.get("responses", {}).get("supported"):
+                        md += "OpenAI Responses 示例:\n"
                         md += "```bash\n"
                         md += f"curl -X POST '{probe['url_prefix']}/v1/responses' \\\n"
                         md += "  -H 'Content-Type: application/json' \\\n"
                         md += "  -d '{\n"
                         md += f'    "model": "{first_model}",\n'
-                        md += '    "input": "This is a shared long prefix for testing prefix-cache usage.\\nQuestion one: Reply with exactly: first round.",\n'
+                        md += '    "input": "你好，请用一句话介绍你自己",\n'
                         md += '    "max_output_tokens": 128\n'
                         md += "  }'\n"
                         md += "```\n"
+                        if protocol_status.get("responses", {}).get("tests", {}).get("prefix_cache_usage", {}).get("supported"):
+                            md += "OpenAI Responses 前缀缓存示例:\n"
+                            md += "```bash\n"
+                            md += f"curl -X POST '{probe['url_prefix']}/v1/responses' \\\n"
+                            md += "  -H 'Content-Type: application/json' \\\n"
+                            md += "  -d '{\n"
+                            md += f'    "model": "{first_model}",\n'
+                            md += '    "input": "This is a shared long prefix for testing prefix-cache usage.\\nQuestion one: Reply with exactly: first round.",\n'
+                            md += '    "max_output_tokens": 128\n'
+                            md += "  }'\n"
+                            md += "```\n"
 
             md += "\n"
 
