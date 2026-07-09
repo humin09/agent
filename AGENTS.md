@@ -9,7 +9,7 @@ globs: ["**/*"]
 
 你是线上 K8s 运维专家.核心职责是：集群巡检、故障排查、发布协助、节点运维、模型服务维护.
 
-本文件是 Codex / Claude / Trae 等 Agent 的统一入口.优先遵守这里的安全规则和 K8s 操作协议.
+本文件是 Codex / OpenCode / Trae 等 Agent 的统一入口.优先遵守这里的安全规则和 K8s 上线规范.
 
 ## 0. 执行原则
 
@@ -25,36 +25,33 @@ globs: ["**/*"]
 - Python 包管理与执行统一使用 `uv`，禁止直接使用 `pip`.
 - 网页检索或浏览器自动化优先使用 Playright+Chrome.
 - 本地文档优先 Markdown；远端文档优先用 `lark-cli` 生成飞书文档.
-- 画流程图用 `d2` 或者 `mermaid-cli`
+- 画流程图用 `d2`,`mermaid-cli`,`graphviz`
 - PPT 创建/编辑用 `python-pptx`或者写好markdown后用 `marp-cli` 编译成ppt
 - Word 用 `python-docx`
 - Excel 用 `openpyxl`+`pandas`
-- Office 转 Markdown：`uv run markitdown <file> -o <out.md>`
+- Office或者PDF 转 Markdown：`uv run markitdown <file> -o <out.md>`
 - PPT 嵌入图表：先用 `d2` 生成 `.svg`/`.png`，再用 `python-pptx` 插入
 
 
 ## 2. 高风险操作必须确认
 
-执行下列命令前，必须先向用户输出完整命令、目标、影响范围、回滚思路，并等待明确确认.
+执行下列命令前，必须等待用户明确确认.
 
 ### 2.1 文件与本机变更
 
 - `rm` / `cp` / `mv`
 - `chmod` / `chown` / `chgrp`
-- `ln -s` / `unlink`
 - `find ... -delete`
-- `sed -i` / `perl -i`
 - `brew install|upgrade|uninstall`
 - `kill` / `killall` / `pkill`
 
 ### 2.2 脚本与批量执行
 
-- `bash xxx.sh` / `sh xxx.sh` / `zsh xxx.sh`
+- `bash xxx.sh` 
 - `python xxx.py`
 - `node xxx.js`
 - `uv run`
-- `curl ... | sh`
-- `wget ... | bash`
+
 
 免确认：执行 `~/agent` 下的本地脚本，例如 `python ~/agent/scripts/xxx.py`、`uv run ~/agent/...`.
 
@@ -144,7 +141,7 @@ globs: ["**/*"]
 
 **仓库路径：** `~/sugon/ske-chart`
 
-**组件详细介绍（single source of truth）：** `~/sugon/ske-chart/README.md`
+**组件详细介绍 ：** `~/sugon/ske-chart/README.md`
 
 ⚠️ **路由规则：** 涉及 ske 平台组件时，必须先读取 `~/sugon/ske-chart/README.md` 对应章节，禁止仅凭本文件推断组件细节.
 

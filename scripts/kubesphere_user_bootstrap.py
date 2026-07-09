@@ -8,6 +8,10 @@ Default flow:
 - workspace role = <username>-admin
 - namespace role = admin
 - granted clusters = requested clusters
+- WorkspaceTemplate placement always includes the host cluster
+  (`DEFAULT_HOST_CLUSTER`) in addition to requested clusters, because the
+  KubeSphere dashboard API only lists workspaces that exist on the host
+  cluster; without the host in placement the user sees an empty dashboard.
 - namespace labels patched in place (ns must already exist)
 
 The script only renders manifests. It never creates namespaces.
@@ -22,6 +26,9 @@ import os
 import subprocess
 import sys
 from typing import Iterable
+
+
+DEFAULT_HOST_CLUSTER = "cluster-host-kunshan"
 
 
 def build_user(username: str, email: str, password: str, clusters: list[str]) -> dict:
@@ -368,6 +375,18 @@ def validate_args(args: argparse.Namespace) -> None:
     if args.password is None:
         args.password = f"{args.username[0].upper()}{args.username[1:]}@123"
 
+    # WorkspaceTemplate placement must include the host cluster so the
+    # KubeSphere dashboard API (which only queries workspaces on the host)
+    # can list this user's workspace. We do de-duplicate while preserving
+    # deterministic order (host first, then user-specified clusters).
+    seen: set[str] = set()
+    placement: list[str] = []
+    for c in [DEFAULT_HOST_CLUSTER, *args.clusters]:
+        if c not in seen:
+            seen.add(c)
+            placement.append(c)
+    args.placement_clusters = placement
+
 
 def validate_namespaces_exist(args: argparse.Namespace) -> None:
     if not args.context:
@@ -375,6 +394,10 @@ def validate_namespaces_exist(args: argparse.Namespace) -> None:
     checked_contexts: set[str] = set()
     missing: list[str] = []
     for cluster in args.clusters:
+        # Host cluster namespace is managed by the workspace controller itself;
+        # we only preflight member cluster namespaces.
+        if cluster == DEFAULT_HOST_CLUSTER:
+            continue
         context = args.member_context_map.get(cluster, args.context)
         context_key = f"{cluster}:{context}"
         if context_key in checked_contexts:
@@ -436,9 +459,9 @@ def main() -> int:
     validate_namespaces_exist(args)
 
     documents: list[dict] = [
-        build_user(args.username, args.email, args.password, args.clusters),
+        build_user(args.username, args.email, args.password, args.placement_clusters),
         build_global_role_binding(args.username),
-        build_workspace_template(args.username, args.clusters),
+        build_workspace_template(args.username, args.placement_clusters),
         build_workspace_role_binding(args.username),
         build_namespace_role_binding(args.username),
     ]
