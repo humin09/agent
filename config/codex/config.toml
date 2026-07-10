@@ -1,48 +1,12 @@
-#model_provider = "crs"
-#model = "gpt-5.4-mini"
-#model_reasoning_effort = "medium"
 ask_for_approval = "never"
 disable_response_storage = true
 preferred_auth_method = "apikey"
 notify = [ "/bin/sh", "/Users/humin/.codex/notify_on_finish.sh" ]
 approvals_reviewer = "user"
-
-
 model = "gpt-5.5"
 model_provider = "scnet"
-model_context_window = 128000
-model_reasoning_effort = "medium"
-
-[model_providers.minimax]
-name = "MiniMax"
-base_url = "https://api.minimaxi.com/v1"
-experimental_bearer_token = "sk-cp-Gctr7b7M_docI296jkJM22-nIou936bVqPYw-bILNH54FzJZUXivUcGgsmK00xV_cK0RAX3wsrCovx1PFHFN3hl-UNopIu9eckGkPD8NO07MQ1_W6oAAxTg"
-wire_api = "responses"
-
-[model_providers.codex]
-name = "codex"
-base_url = "https://new.pumpkinai.vip/v1"
-wire_api = "responses"
-requires_openai_auth = true
-preferred_auth_method = "apikey"
-notify = [ "/bin/sh", "/Users/humin/.codex/notify_on_finish.sh" ]
-
-[model_providers.crs]
-name = "crs"
-base_url = "https://capi.quan2go.com/openai"
-wire_api = "responses"
-requires_openai_auth = true
-
-[model_providers.volcengine]
-name = "volcengine"
-base_url = "https://ark.cn-beijing.volces.com/api/v3"
-wire_api = "responses"
-api_key = "2876116d-3dc4-4cfe-b630-f60e8627f4e2"
-models = [
-  "doubao-seed-2.0-code",
-  "doubao-seed-2.0-pro",
-  "doubao-seed-2.0-lite"
-]
+model_context_window = 128_000
+model_reasoning_effort = "high"
 
 [model_providers.dashscope]
 name = "DashScope"
@@ -59,15 +23,29 @@ wire_api = "responses"
 models = [
   "gpt-5.5",
   "claude-opus-4-8",
+  "claude-opus-4-7",
+  "claude-opus-4-6",
+  "claude-sonnet-5",
+  "claude-fable-5",
   "deepseek-v4-pro",
   "deepseek-v4-flash",
   "gemini-3.5-flash",
-  "gemini-3.1-flash-lite"
+  "gemini-3.1-flash-lite",
+  "glm-5.2",
+  "glm-5.1",
+  "hy3",
+  "hy3-preview"
 ]
 
 [mcp_servers.playwright]
 args = [ "@playwright/mcp@latest", "--browser", "chromium" ]
 command = "npx"
+
+[mcp_servers.codex_apps]
+enabled = false
+command = "true"
+args = []
+
 
 [projects."/Users/humin"]
 trust_level = "trusted"
@@ -76,35 +54,11 @@ trust_level = "trusted"
 trust_level = "trusted"
 
 [notice.model_migrations]
-"gpt-5.3-codex" = "gpt-5.4"
+"gpt-5.3-codex" = "claude-fable-5"
 
 [features]
 multi_agent = true
 
-[marketplaces.openai-bundled]
-last_updated = "2026-05-18T02:16:59Z"
-source_type = "local"
-source = "/Users/humin/.codex/.tmp/bundled-marketplaces/openai-bundled"
-
-[marketplaces.openai-primary-runtime]
-last_updated = "2026-05-15T21:42:40Z"
-source_type = "local"
-source = "/Users/humin/.cache/codex-runtimes/codex-primary-runtime/plugins/openai-primary-runtime"
-
 [tui.model_availability_nux]
 "gpt-5.5" = 4
-
-[plugins."computer-use@openai-bundled"]
-enabled = true
-
-[plugins."documents@openai-primary-runtime"]
-enabled = true
-
-[plugins."spreadsheets@openai-primary-runtime"]
-enabled = true
-
-[plugins."presentations@openai-primary-runtime"]
-enabled = true
-
-[plugins."browser@openai-bundled"]
-enabled = true
+"gpt-5.6-sol" = 4

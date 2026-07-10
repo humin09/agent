@@ -1,0 +1,72 @@
+{
+  "customProfiles": {
+    "defaultCustomProfile": {
+      "displayName": "",
+      "shellSandbox": {
+        "enable": false,
+        "onRestrict": "request_permission_retry_sandbox"
+      },
+      "approval": {
+        "reviewer": "agent",
+        "sceneRules": {
+          "commandAstDangerChecker": true,
+          "shellFileProtection": false,
+          "deleteToolApproval": false,
+          "mcpToolApproval": false
+        },
+        "commandRules": {
+          "echo *": {
+            "approval": "allow",
+            "execEnv": "host"
+          },
+          "kubectl *": {
+            "approval": "allow",
+            "execEnv": "host"
+          },
+          "grep *": {
+            "approval": "allow",
+            "execEnv": "host"
+          },
+          "awk *": {
+            "approval": "allow",
+            "execEnv": "host"
+          },
+          "head *": {
+            "approval": "allow",
+            "execEnv": "host"
+          },
+          "tail *": {
+            "approval": "allow",
+            "execEnv": "host"
+          },
+          "uv *": {
+            "approval": "allow",
+            "execEnv": "host"
+          },
+          "kubectx *": {
+            "approval": "allow",
+            "execEnv": "host"
+          }
+        },
+        "mcpRules": {}
+      },
+      "filesystem": {
+        "default": "read_write"
+      },
+      "network": {
+        "default": "allow"
+      }
+    }
+  },
+  "resourceAuthorization": {
+    "filesystem": {
+      "readWrite": [],
+      "readOnly": []
+    },
+    "network": {
+      "allow": [],
+      "deny": []
+    }
+  },
+  "_migrationVersion": 1
+}
