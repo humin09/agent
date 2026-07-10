@@ -2,6 +2,16 @@
   "$schema": "https://opencode.ai/config.json",
   "permission": "allow",
   "model": "dashscope/qwen3.7-max",
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "@playwright/mcp@latest",
+        "--browser",
+        "chromium"
+      ]
+    }
+  },
   "small_model": "dashscope/qwen3.7-max",
   "enabled_providers": ["dashscope", "volcengine-plan", "minimax", "litellm"],
   "provider": {

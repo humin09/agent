@@ -23,7 +23,7 @@ globs: ["**/*"]
 
 - Agentic 编程优先使用 Python.
 - Python 包管理与执行统一使用 `uv`，禁止直接使用 `pip`.
-- 网页检索或浏览器自动化优先使用 Playright+Chrome.
+- 网页检索或浏览器自动化优先使用 `npx playwright`.
 - 本地文档优先 Markdown；远端文档优先用 `lark-cli` 生成飞书文档.
 - 画流程图用 `d2`,`mermaid-cli`,`graphviz`
 - PPT 创建/编辑用 `python-pptx`或者写好markdown后用 `marp-cli` 编译成ppt
@@ -108,7 +108,7 @@ globs: ["**/*"]
 | `ny` | 纽约 | 生产 | 10.4.17.5 | `https://<app>.zzai.scnet.ai:58043` |
 | `wq` | 魏桥 | 生产 | 172.18.18.18 | `https://<app>.sd5ai.scnet.cn:58043` |
 | `bj` | 北京 | 测试 | 10.0.31.15 | `https://<app>.sugon-bj.xyz:58043` |
-| `sh` | 上海 | 测试 | 10.16.5.1 | `https://<app>.sugon-sh.xyz:58043` |
+| `sh` | 上海 | 测试 | 10.16.5.1 | `https://<app>.sugon-sh.xyz:30440` |
 | `ly` | 洛阳 | 测试 | 172.20.13.202 | `https://<app>.zzai.scnet.ai:58043` |
 | `xa` | 西安 | 测试 | - | `https://<app>.xaai.scnet.ai:58043` |
 | `bs` | 璧山 | 测试 | 10.32.0.11 | `https://<app>.sugon-bs.xyz:58043` |
