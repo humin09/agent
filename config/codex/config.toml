@@ -3,10 +3,10 @@ disable_response_storage = true
 preferred_auth_method = "apikey"
 notify = [ "/bin/sh", "/Users/humin/.codex/notify_on_finish.sh" ]
 approvals_reviewer = "user"
-model = "gpt-5.5"
+model = "gpt-5.6-terra"
 model_provider = "scnet"
 model_context_window = 128_000
-model_reasoning_effort = "high"
+model_reasoning_effort = "medium"
 
 [model_providers.dashscope]
 name = "DashScope"
@@ -34,7 +34,10 @@ models = [
   "glm-5.2",
   "glm-5.1",
   "hy3",
-  "hy3-preview"
+  "hy3-preview",
+  "gpt-5.6-terra",
+  "gpt-5.6-sol",
+  "gpt-5.6-luna"
 ]
 
 [mcp_servers.playwright]

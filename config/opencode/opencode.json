@@ -1,15 +1,15 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": "allow",
-  "model": "dashscope/qwen3.7-max",
+  "model": "litellm/gpt-5.6-terra",
   "mcp": {
     "playwright": {
       "type": "local",
       "command": ["npx", "@playwright/mcp@latest", "--browser", "chromium"]
     }
   },
-  "small_model": "dashscope/qwen3.7-max",
-  "enabled_providers": ["dashscope", "litellm"],
+  "small_model": "litellm/gpt-5.6-terra",
+  "enabled_providers": ["litellm", "dashscope"],
   "provider": {
     "dashscope": {
       "npm": "@ai-sdk/openai-compatible",
@@ -144,6 +144,27 @@
         },
         "hy3-preview": {
           "name": "HY3 Preview",
+          "limit": {
+            "context": 128000,
+            "output": 4096
+          }
+        },
+        "gpt-5.6-terra": {
+          "name": "GPT-5.6 Terra",
+          "limit": {
+            "context": 128000,
+            "output": 4096
+          }
+        },
+        "gpt-5.6-sol": {
+          "name": "GPT-5.6 Sol",
+          "limit": {
+            "context": 128000,
+            "output": 4096
+          }
+        },
+        "gpt-5.6-luna": {
+          "name": "GPT-5.6 Luna",
           "limit": {
             "context": 128000,
             "output": 4096
