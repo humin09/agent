@@ -234,7 +234,7 @@ NotReady 或已 Cordon 节点：先找 `kubeasz=true` 节点，再通过 `node-s
 
 ### 7.5 镜像构建与同步
 
-镜像构建、拉取、重打 tag、推送统一通过 `ske-model` 命名空间下 `ske-tool` DaemonSet.
+镜像构建、拉取、重打 tag、推送统一通过 `ske-model` 命名空间下 `ske-tool` pod.
 
 #### 构建
 
@@ -271,13 +271,13 @@ NotReady 或已 Cordon 节点：先找 `kubeasz=true` 节点，再通过 `node-s
 
 执行后同步更新 `~/sugon/ske-chart/maas` 下的模型 YAML.
 
-### 7.7 MinIO
+### 7.7 Gitlab和minio
 
 #### 查看 MinIO 同步进度
 
-- 扫描多集群 MinIO 同步进度：`python ~/agent/scripts/minio_scan.py -c ks zz qd dz`
+- 扫描多集群 MinIO 同步进度：` python3 ~/agent/scripts/scan_lfs.py`
 
-更多规则见 `~/agent/minio/SKILL.md`.
+更多规则见 ` python3 ~/agent/scripts/scan_lfs.py -h`.
 
 
 ### 7.8 K8s 用户资源组和挂载路径策略
