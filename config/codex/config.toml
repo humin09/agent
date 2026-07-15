@@ -3,9 +3,9 @@ disable_response_storage = true
 preferred_auth_method = "apikey"
 notify = [ "/bin/sh", "/Users/humin/.codex/notify_on_finish.sh" ]
 approvals_reviewer = "user"
-model = "qwen3.7-max"
-model_provider = "dashscope"
-model_context_window = 256_000
+model = "gpt-5.6-sol"
+model_provider = "scnet"
+model_context_window = 1_000_000
 model_reasoning_effort = "medium"
 
 [model_providers.dashscope]

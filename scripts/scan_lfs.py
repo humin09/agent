@@ -623,13 +623,13 @@ def upload_to_lark(out_md: str):
 def main():
     example = """
 使用示例:
-  %(prog)s                          默认行为: 复用已有 index, 检查各集群 MinIO 完备性
-  %(prog)s --refresh                刷新 index (重新获取 GitLab 项目 + LFS 指针) + 检查
+  %(prog)s                          默认行为: 复用已有 index, 检查各集群 MinIO 完备性, 上传飞书
+  %(prog)s --no-lark                同上, 但不上传飞书
+  %(prog)s --refresh                刷新 index (重新获取 GitLab 项目 + LFS 指针) + 检查 + 上传飞书
   %(prog)s --refresh -m 1           只刷新最近 1 个月的项目
-  %(prog)s --refresh --lark         刷新 index + 检查 + 上传飞书 (标题固定: 模型完备性报告)
-  %(prog)s -c xa qd                 只检查 xa 和 qd 两个集群
+  %(prog)s -c xa qd                 只检查 xa 和 qd 两个集群 (仍上传飞书)
   %(prog)s --max 20                 只检查前 20 个项目 (快速验证)
-  %(prog)s --list-only              仅列出项目, 不执行 mc stat
+  %(prog)s --list-only              仅列出项目, 不执行 mc stat 检查
   %(prog)s -j 16                    提高每个集群并发 (默认 8, 总并发上限 32)
 
 输出文件 (默认):
@@ -639,9 +639,10 @@ def main():
   ~/agent/reports/scan_lfs_report.md    报告 (标题固定为「模型完备性报告」)
 
 典型工作流:
-  1. 首次或项目列表变更时: python3 ~/agent/scripts/scan_lfs.py --refresh --lark
-  2. 日常巡检 (复用 index): python3 ~/agent/scripts/scan_lfs.py
-  3. 只看部分集群:          python3 ~/agent/scripts/scan_lfs.py -c xa qd --lark
+  1. 日常巡检 (复用 index, 上传飞书):  python3 ~/agent/scripts/scan_lfs.py
+  2. 项目列表变更后 (刷新 index):      python3 ~/agent/scripts/scan_lfs.py --refresh
+  3. 只看部分集群:                     python3 ~/agent/scripts/scan_lfs.py -c xa qd
+  4. 不上传飞书:                       python3 ~/agent/scripts/scan_lfs.py --no-lark
 """
     parser = argparse.ArgumentParser(
         description="GitLab LFS 多集群完备性扫描器",
@@ -667,8 +668,10 @@ def main():
                         help=f"MD 报告输出路径 (默认: {DEFAULT_REPORT})")
     parser.add_argument("--json-output", default=DEFAULT_JSON,
                         help=f"同步计划 JSON 输出路径 (默认: {DEFAULT_JSON})")
-    parser.add_argument("--lark", action="store_true",
-                        help="完成后上传飞书 (标题固定: 模型完备性报告, URL 自动复用)")
+    parser.add_argument("--lark", action="store_true", default=True,
+                        help="完成后上传飞书 (标题固定: 模型完备性报告, URL 自动复用; 默认开启)")
+    parser.add_argument("--no-lark", action="store_true", dest="no_lark",
+                        help="不上传飞书")
     args = parser.parse_args()
 
     args.output = os.path.expanduser(args.output)
@@ -717,7 +720,7 @@ def main():
     )
 
     # --- 飞书上传 ---
-    if args.lark:
+    if args.lark and not args.no_lark:
         upload_to_lark(args.output)
 
 
