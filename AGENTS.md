@@ -234,18 +234,31 @@ NotReady 或已 Cordon 节点：先找 `kubeasz=true` 节点，再通过 `node-s
 
 ### 7.5 镜像构建与同步
 
-镜像构建、拉取、重打 tag、推送统一通过 `ske-model` 命名空间下 `ske-tool` pod.
+本地使用 Docker Buildx 构建并推送 `linux/amd64` 镜像.首次推送前执行 `docker login image.sourcefind.cn:5000`.
 
 #### 构建
 
-- 查询构建 Pod：`kubectl --context <ctx> -n ske-model get pod -l app=ske-tool -o wide`
-- 拷贝 Dockerfile 到构建 Pod：`kubectl --context <ctx> -n ske-model cp /local/path/Dockerfile <ske-tool-pod>:/tmp/build/`
-- 拷贝源码到构建 Pod：`kubectl --context <ctx> -n ske-model cp /local/path/source <ske-tool-pod>:/tmp/build/`
-- 构建并推送源站镜像：`kubectl --context <ctx> -n ske-model exec <ske-tool-pod> -- sh -c 'cd /tmp/build && docker build -t image.sourcefind.cn:5000/k8s/<image>:<tag> . && docker push image.sourcefind.cn:5000/k8s/<image>:<tag>'`
+```bash
+docker buildx build \
+  --platform linux/amd64 \
+  -t image.sourcefind.cn:5000/k8s/<image>:<tag> \
+  --push \
+  .
+```
 
-#### 同步到目标集群
+- 验证架构：`docker buildx imagetools inspect image.sourcefind.cn:5000/k8s/<image>:<tag>`，应包含 `Platform: linux/amd64`.
 
-- 同步源站镜像到目标集群内网 Harbor：`kubectl --context <ctx> -n ske-model exec <ske-tool-pod> -- sh -c 'docker pull image.sourcefind.cn:5000/k8s/<image>:<tag> && docker tag image.sourcefind.cn:5000/k8s/<image>:<tag> image.ac.com:5000/k8s/<image>:<tag> && docker push image.ac.com:5000/k8s/<image>:<tag>'`
+#### 拉取与转存
+
+- `image.sourcefind.cn:5000` 和 `image.ac.com` 的镜像可直接拉取.
+- 其他来源的镜像需通过目标集群 `ske-model` 命名空间的 `ske-tool` Pod 拉取，并转存到 `image.ac.com:5000/k8s`：
+
+```bash
+kubectl --context <ctx> -n ske-model exec <ske-tool-pod> -- sh -c \
+  'docker pull <source-image>:<source-tag> && \
+   docker tag <source-image>:<source-tag> image.ac.com:5000/k8s/<image>:<tag> && \
+   docker push image.ac.com:5000/k8s/<image>:<tag>'
+```
 
 ### 7.6 MAAS 模型服务
 
