@@ -23,7 +23,7 @@ globs: ["**/*"]
 
 - Agentic 编程优先使用 Python.
 - Python 包管理与执行统一使用 `uv`，禁止直接使用 `pip`.
-- 网页检索或浏览器自动化优先使用 `npx playwright`.
+- 浏览器自动化优先使用 Playwright MCP 工具（`browser_navigate`、`browser_snapshot`、`browser_click` 等），不要调用 shell 去 `npx playwright`.
 - 本地文档优先 Markdown；远端文档优先用 `lark-cli` 生成飞书文档.
 - 画流程图用 `d2`,`mermaid-cli`,`graphviz`
 - PPT 创建/编辑用 `python-pptx`或者写好markdown后用 `marp-cli` 编译成ppt
