@@ -365,6 +365,95 @@ helm install kyverno-template ~/sugon/ske-chart/kyverno \
 
 注意：tx 集群的 kubectl 命令**不需要** `--context` 参数.
 
+### 7.10 `/data` 未挂载导致 containerd / kubelet 异常
+
+典型现象：节点同时出现 `ContainerdFailed`、`KubeletFailed` 或 `Ready=Unknown`，服务状态中可见：
+
+```text
+ExecStartPre=/usr/bin/mountpoint -q /data
+```
+
+处理原则：只挂载已存在的文件系统并固化到 `/etc/fstab`。禁止自动分区、格式化或对未知磁盘执行 `mkfs`。涉及挂载、修改 fstab、重启服务、kubeasz 退加节点时，必须先按变更模板等待用户确认。
+
+#### 7.10.1 只读确认
+
+先确认集群、节点、Ready 状态和 kubeasz 节点：
+
+```bash
+kubectl --context <ctx> get node <node_ip> -o wide
+kubectl --context <ctx> get node -l kubeasz=true -o wide
+```
+
+Ready 节点直接用 node-shell；NotReady 节点必须经 kubeasz 节点 SSH 排查：
+
+```bash
+kubectl node-shell --context <ctx> <kubeasz_ip> -- ssh root@<node_ip> \
+  'hostname; systemctl status containerd kubelet --no-pager; findmnt /data; lsblk -o NAME,SIZE,FSTYPE,UUID,MOUNTPOINT; blkid /dev/nvme0n1p1; grep -nE "[[:space:]]/data[[:space:]]" /etc/fstab || true'
+```
+
+只有同时满足下列条件才允许进入挂载步骤：
+
+- `/data` 当前不是挂载点。
+- `/dev/nvme0n1p1` 存在，且 `blkid` 显示 `TYPE="xfs"`。
+- 已记录文件系统 UUID，确认不是系统盘或其他业务盘。
+
+如果磁盘无分区、无文件系统、设备名不一致或 `blkid` 无输出，立即停止并请求确认；不得自行执行 `fdisk`、`parted`、`mkfs`、`xfs_repair`。
+
+#### 7.10.2 挂载并固化 fstab
+
+先按第 4 节模板说明影响范围并等待确认。确认后每次只处理一台节点：
+
+```bash
+kubectl node-shell --context <ctx> <kubeasz_ip> -- ssh root@<node_ip> '
+set -e
+test -b /dev/nvme0n1p1
+test "$(blkid -s TYPE -o value /dev/nvme0n1p1)" = xfs
+test -e /etc/fstab.bak-data-mount || cp -a /etc/fstab /etc/fstab.bak-data-mount
+data_uuid=$(blkid -s UUID -o value /dev/nvme0n1p1)
+grep -Eq "^[[:space:]]*[^#].*[[:space:]]/data[[:space:]]" /etc/fstab || \
+  printf "UUID=%s /data xfs defaults 0 0\n" "$data_uuid" >> /etc/fstab
+findmnt --fstab --evaluate --target /data
+mountpoint -q /data || mount /data
+findmnt /data
+'
+```
+
+不要直接写死其他节点的 UUID，也不要批量并发挂载。完成后等待 containerd、kubelet 的 systemd 自动重试；如果服务未自动恢复，执行 `systemctl restart` 前需再次确认。
+
+#### 7.10.3 恢复验证
+
+```bash
+kubectl --context <ctx> wait --for=condition=Ready node/<node_ip> --timeout=90s
+kubectl --context <ctx> get node <node_ip> -o wide
+kubectl node-shell --context <ctx> <node_ip> -- sh -c \
+  'findmnt /data; systemctl is-active containerd kubelet; grep -nE "^[[:space:]]*[^#].*[[:space:]]/data[[:space:]]" /etc/fstab'
+```
+
+同时检查节点上的 Pod、事件和原告警是否恢复。节点未 Ready 时，继续通过 kubeasz 节点 SSH 验证，不要直接 node-shell 到故障节点。
+
+#### 7.10.4 kubeasz 退加节点
+
+只有用户明确要求退加节点时才执行。`ezctl del-node` 会 drain 节点，并删除 `/data/lib/kubelet`、`/data/lib/containerd`、CNI 和 Kubernetes 配置，必须逐台灰度。
+
+退节点前必须先执行 NHC；共享存储未挂载时禁止退节点，否则重新加节点会在 precheck 阶段失败：
+
+```bash
+kubectl node-shell --context <ctx> <kubeasz_ip> -- ssh root@<node_ip> \
+  'nhc; findmnt -rn -o SOURCE,TARGET,FSTYPE | grep -E "[[:space:]]/(public|work2)([[:space:]]|$)"'
+```
+
+确认 NHC 通过后执行：
+
+```bash
+kubectl node-shell --context <ctx> <kubeasz_ip> -- \
+  docker exec kubeasz ezctl del-node k8s <node_ip>
+
+kubectl node-shell --context <ctx> <kubeasz_ip> -- \
+  docker exec kubeasz ezctl add-node k8s <node_ip> dcu
+```
+
+每台重加后必须验证 `/data`、containerd、kubelet、Node Ready 和 Pod。任一预检、playbook 或验证步骤异常时立即停止后续节点；只读诊断后重新提交变更计划，不得跳过 NHC 或擅自执行额外修复。
+
 ## 8. 专项 Skill 入口
 
 - ResourceGroup：`~/agent/resourcegroup/SKILL.md`
