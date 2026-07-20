@@ -137,13 +137,26 @@ globs: ["**/*"]
 
 
 
-## 6. 组件与配置仓库
+## 6. 线上 K8s 组件 Helm 仓库
 
 **仓库路径：** `~/sugon/ske-chart`
 
 **组件详细介绍 ：** `~/sugon/ske-chart/README.md`
 
 ⚠️ **路由规则：** 涉及 ske 平台组件时，必须先读取 `~/sugon/ske-chart/README.md` 对应章节，禁止仅凭本文件推断组件细节.
+
+⚠️ **变更同步与合入流程：**
+
+1. **配置回写：** 任何线上变更（helm upgrade/rollback、kubectl apply 等）完成后，必须立即将线上实际生效的 helm values 同步回本仓库对应组件目录，保持仓库与线上状态一致.
+2. **提交分支：** 所有变更必须提交到 `1.0.0/dev` 分支并推送到远程仓库：
+   ```bash
+   # 在 ~/sugon/ske-chart 目录执行，commit message 需说明集群、组件、变更原因
+   git checkout 1.0.0/dev
+   git add <changed-files>
+   git commit -m "<ctx>/<component>: <change description>"
+   git push origin 1.0.0/dev
+   ```
+3. **发起 MR：** 推送到 `1.0.0/dev` 后，通过 Playwright 自动化脚本向 `master` 分支发起 Merge Request，MR 标题格式：`[<ctx>] <component> <brief description>`，等待人工审核合入.
 
 线上部署变更后，按下方表格定位本地配置并回写:
 - `dnsmasq-client` | `ske` | `~/sugon/ske-chart/dnsmasq-client`
