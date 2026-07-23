@@ -23,8 +23,8 @@ globs: ["**/*"]
 
 - Agentic 编程优先使用 Python.
 - Python 包管理与执行统一使用 `uv`，禁止直接使用 `pip`.
-- 浏览器自动化优先使用 Playwright MCP 工具（`browser_navigate`、`browser_snapshot`、`browser_click` 等），不要调用 shell 去 `npx playwright`.
-- 本地文档优先 Markdown；远端文档优先用 `lark-cli` 生成飞书文档.
+- 浏览器自动化优先使用 Playwright MCP 工具（`browser_navigate`、`browser_snapshot`、`browser_click` 等），不要调用 shell 去 `npx playwright`. 需要发起 MR 时使用 Playwright 访问 http://gitlab.hpc.sugon.com，账号凭据从环境变量 `GITLAB_USER` / `GITLAB_PASS` 读取.
+- 本地文档优先 Markdown；远端文档优先用 `lark-cli` 生成飞书文档. 创建：`lark-cli docs +create --title "<title>" --from markdown --input <markdown file path>`；更新：`lark-cli docs update --file-token <doc token> --mode overwrite --input <file path>`.
 - 画流程图用 `d2`,`mermaid-cli`,`graphviz`
 - PPT 创建/编辑用 `python-pptx`或者写好markdown后用 `marp-cli` 编译成ppt
 - Word 用 `python-docx`
@@ -79,7 +79,7 @@ globs: ["**/*"]
 
 ## 4. K8S线上(生成)变更规范
 - ⚠️ **该规范适用于所有线上k8s集群**.
-- ⚠️ **升级严禁全部升级, 应该每个集群逐步升级, 升级执行前需要用户确认**.
+- ⚠️ **升级严禁全部升级, 应该每个集群逐步升级, 升级执行前需要用户确认,默认升级顺序是sh,wq,wh,sz,dz,qd,zz,ks**.
 - ⚠️ **升级优先基于helm升级, 按下列模板生成升级计划, 回滚也是基于计划回滚**.
     ```yaml
     准备执行变更命令：`<完整命令>`, 优先使用helm升级和回滚, 记录好版本
@@ -112,6 +112,7 @@ globs: ["**/*"]
 | `ly` | 洛阳 | 测试 | 172.20.13.202 | `https://<app>.zzai.scnet.ai:58043` |
 | `xa` | 西安 | 测试 | - | `https://<app>.xaai.scnet.ai:58043` |
 | `bs` | 璧山 | 测试 | 10.32.0.11 | `https://<app>.sugon-bs.xyz:58043` |
+| `wz` | 乌镇 | 测试 | 10.14.4.54 | `https://<app>.sugon-bs.xyz:58043` |  
 
 端口说明：
 - `58043`: HTTPS ingress 入口，常见 app：`minio`、`vm`、`vl ingress` 等
@@ -156,7 +157,7 @@ globs: ["**/*"]
    git commit -m "<ctx>/<component>: <change description>"
    git push origin 1.0.0/dev
    ```
-3. **发起 MR：** 推送到 `1.0.0/dev` 后，通过 Playwright 自动化脚本向 `master` 分支发起 Merge Request，MR 标题格式：`[<ctx>] <component> <brief description>`，等待人工审核合入.
+ 
 
 线上部署变更后，按下方表格定位本地配置并回写:
 - `dnsmasq-client` | `ske` | `~/sugon/ske-chart/dnsmasq-client`
@@ -215,6 +216,7 @@ globs: ["**/*"]
 - 查找 kubeasz/ex-lb 节点：`kubectl --context <ctx> get node -l kubeasz/ex-lb=true -o wide`
 - 查到资源组的 id 为 `<groupId>` 的节点列表：`kubectl --context <ctx> get node -l groupId=<groupId>`
 - 拿到所有资源组信息：`kubectl --context <ctx> -n kube-system get resourcegroup`
+- 如果给的节点名不是ip,通过标签获得节点ip: `kubectl --context <ctx> get node -l nodeName=<节点名>`  
 
 #### Ready 节点排查
 

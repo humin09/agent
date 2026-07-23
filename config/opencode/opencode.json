@@ -40,6 +40,17 @@
             "input": ["text", "image"],
             "output": ["text"]
           }
+        },
+        "kimi/kimi-k3": {
+          "name": "Kimi K3",
+          "limit": {
+            "context": 224000,
+            "output": 16384
+          },
+          "modalities": {
+            "input": ["text"],
+            "output": ["text"]
+          }
         }
       }
     },
@@ -168,6 +179,13 @@
           "limit": {
             "context": 128000,
             "output": 4096
+          }
+        },
+        "kimi-k3": {
+          "name": "Kimi K3",
+          "limit": {
+            "context": 224000,
+            "output": 16384
           }
         }
       }

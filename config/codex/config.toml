@@ -13,7 +13,7 @@ name = "DashScope"
 base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 experimental_bearer_token = "sk-e55ed9400a2d44389528ac534e949eb6"
 wire_api = "responses"
-models = [ "qwen3.7-max" ]
+models = [ "qwen3.7-max", "kimi/kimi-k3" ]
 
 [model_providers.scnet]
 name = "SCNet LiteLLM"
@@ -37,7 +37,8 @@ models = [
   "hy3-preview",
   "gpt-5.6-terra",
   "gpt-5.6-sol",
-  "gpt-5.6-luna"
+  "gpt-5.6-luna",
+  "kimi-k3"
 ]
 
 [mcp_servers.playwright]

@@ -2,17 +2,22 @@
 """GitLab LFS 多集群完备性扫描器（standalone）
 
 功能：
-  1. 扫描最近 N 个月的 GitLab LFS 项目的指针 (OID)，固化到 index JSON
-  2. 检查各 MinIO 集群是否存在这些 OID
+  1. 扫描最近 N 个月（默认 6 个月）的 GitLab LFS 项目的指针 (OID)，固化到 index JSON
+  2. 检查各 MinIO 集群是否存在这些 OID（增量模式：上次已 COMPLETE 的项目自动跳过）
   3. 输出：
      - MD 报告（标题固定为「模型完备性报告」）
-     - JSON（按集群列出缺失 OID，含引用它的所有项目）
+     - JSON（按集群列出缺失 OID + 各项目检查状态 check_results）
   4. 可选上传固定标题的飞书文档
 
 固化机制：
   - 默认读取 ~/agent/logs/gitlab_lfs_index.json（上次扫描的项目+指针快照）
   - 只跑 Step 4（mc stat）检查各集群完备性
   - 用 --refresh 重新跑 Step 1-3 刷新 index
+
+增量检查（跳过已 COMPLETE）：
+  - 非 --refresh 模式下，自动读取上次 sync JSON 中的 check_results
+  - 上次检查为 COMPLETE 的项目，其所有 OID 视为已在各集群中存在，跳过 mc stat
+  - INCOMPLETE / 新项目照常检查；--refresh 时重新完整检查
 
 并发策略：
   - Step 4: 单全局线程池，总 worker 上限 32，含重试避免误报
@@ -27,6 +32,7 @@
 用法:
   python3 ~/agent/scripts/scan_lfs.py                 # 默认：用已有 index + 检查
   python3 ~/agent/scripts/scan_lfs.py --refresh       # 刷新 index + 检查
+  python3 ~/agent/scripts/scan_lfs.py --refresh -m 6  # 刷新最近 6 个月（默认）
   python3 ~/agent/scripts/scan_lfs.py --refresh -m 1  # 只扫最近 1 个月
   python3 ~/agent/scripts/scan_lfs.py --refresh --lark  # 刷新 + 上传飞书
   python3 ~/agent/scripts/scan_lfs.py -c xa ks         # 只查部分集群
@@ -355,6 +361,21 @@ def refresh_index(months: int, jobs: int = 16, index_path: str = DEFAULT_INDEX) 
     return index
 
 
+# ======================== 增量检查：加载上次结果 ========================
+
+def load_prev_sync(path: str = DEFAULT_JSON) -> dict:
+    """加载上次 sync JSON 中各项目的检查状态，用于跳过已 COMPLETE 的项目。"""
+    p = Path(path)
+    if not p.exists():
+        return {}
+    try:
+        with open(p, encoding="utf-8") as f:
+            data = json.load(f)
+        return data.get("check_results", {})
+    except Exception:
+        return {}
+
+
 # ======================== Step 4: mc stat ========================
 
 def check_oid_in_cluster(oid: str, cluster: str, retries: int = 2):
@@ -378,10 +399,15 @@ def check_oid_in_cluster(oid: str, cluster: str, retries: int = 2):
                 return oid, cluster, False
 
 
-def step4_check_clusters(project_pointers: dict, clusters: list, jobs_per_cluster: int = 16) -> dict:
+def step4_check_clusters(project_pointers: dict, clusters: list,
+                          jobs_per_cluster: int = 16,
+                          skipped_projects: frozenset | None = None) -> dict:
     """检查所有 OID 在各集群的存在情况。
     project_pointers: {proj_path: [ptr_dict, ...]}
+    已经标记为 COMPLETE 的项目 (skipped_projects) 不需要再次 mc stat,
+    直接视为所有集群已存在。
     """
+    skipped_projects = skipped_projects or frozenset()
     max_total_workers = 32
     total_workers = min(jobs_per_cluster * len(clusters), max_total_workers)
 
@@ -391,11 +417,27 @@ def step4_check_clusters(project_pointers: dict, clusters: list, jobs_per_cluste
             for c in clusters:
                 all_jobs.add((ptr["oid"], c))
 
+    results: dict[tuple[str, str], bool] = {}
+
+    if skipped_projects:
+        n_skip = 0
+        for proj_path in list(skipped_projects):
+            if proj_path in project_pointers:
+                for ptr in project_pointers[proj_path]:
+                    for c in clusters:
+                        results[(ptr["oid"], c)] = True
+                        n_skip += 1
+        all_jobs -= set(results.keys())
+        log(f"  跳过已 COMPLETE 的项目: {len(skipped_projects)} 个项目, "
+            f"{n_skip} 个 OID x 集群任务")
+
     total_oids = len(set(j[0] for j in all_jobs))
     log(f"Step 4: mc stat {total_oids} OID x {len(clusters)} 集群 "
         f"(总任务 {len(all_jobs)}, 并发 worker={total_workers})")
 
-    results = {}
+    if not all_jobs:
+        return results
+
     with ThreadPoolExecutor(max_workers=total_workers) as pool:
         futs = {
             pool.submit(check_oid_in_cluster, oid, c): (oid, c)
@@ -416,10 +458,19 @@ def step4_check_clusters(project_pointers: dict, clusters: list, jobs_per_cluste
 
 def generate_reports(cluster_results: dict, projects_slice: list,
                      clusters: list, cutoff_iso: str, months: int,
-                     out_md: str, out_json: str):
+                     out_md: str, out_json: str,
+                     skipped_projects: frozenset | None = None,
+                     prev_check_results: dict | None = None):
     """汇总各项目结果，生成 MD + JSON
     projects_slice: [(proj_path, pdata), ...] where pdata 有 'created' 和 'pointers'
+    上次已 COMPLETE 的项目 (skipped_projects) 直接使用 prev_check_results 中的结果,
+    不再重新检查。
     """
+    skipped_projects = skipped_projects or frozenset()
+    prev_check_results = prev_check_results or {}
+
+    check_results: dict[str, dict] = {}
+    scan_time_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     results = []
     for proj_path, pdata in projects_slice:
         pointers = pdata.get("pointers", [])
@@ -453,15 +504,22 @@ def generate_reports(cluster_results: dict, projects_slice: list,
                 })
 
         all_ok = all(cluster_stats[c]["miss"] == 0 for c in clusters)
+        status = "COMPLETE" if all_ok else "INCOMPLETE"
         results.append({
             "project": proj_path,
             "created": pdata.get("created", ""),
             "lfs_count": len(pointers),
-            "status": "COMPLETE" if all_ok else "INCOMPLETE",
+            "status": status,
             "cluster_stats": cluster_stats,
             "missing_items": missing_items,
             "missing_count": len(missing_items),
         })
+        skipped = proj_path in skipped_projects
+        check_results[proj_path] = {
+            "status": status,
+            "last_checked": prev_check_results.get(proj_path, {}).get("last_checked") if skipped else scan_time_iso,
+            "skip": skipped,
+        }
 
     # --- MD 报告 ---
     with_lfs = [r for r in results if r['lfs_count'] > 0]
@@ -513,6 +571,26 @@ def generate_reports(cluster_results: dict, projects_slice: list,
             md.append(f"| {gitlab_col} | {community_col} | {r['created']} | {r['lfs_count']} | " +
                       " | ".join(marks) + " |")
 
+    if complete:
+        md.extend([
+            "",
+            f"## 完整项目列表 ({len(complete)} 个)",
+            "",
+            "| 项目 | 社区 | 创建时间 | LFS数 | " + " | ".join(clusters) + " |",
+            "|" + "---|" * (4 + len(clusters)),
+        ])
+        for r in complete:
+            proj = r['project']
+            gitlab_url = f"{GITLAB_URL}/{proj}"
+            community_url = proj.replace("model/", "", 1)
+            community_path = f"https://www.scnet.cn/ui/aihub/models/{community_url}"
+
+            gitlab_col = f"[{proj}]({gitlab_url})"
+            community_col = f"[社区]({community_path})"
+            marks = ["✅" for _ in clusters]
+            md.append(f"| {gitlab_col} | {community_col} | {r['created']} | {r['lfs_count']} | " +
+                      " | ".join(marks) + " |")
+
     with open(out_md, "w", encoding="utf-8") as f:
         f.write("\n".join(md) + "\n")
 
@@ -531,6 +609,9 @@ def generate_reports(cluster_results: dict, projects_slice: list,
                 if r['project'] not in sync_plan[c][oid]['projects']:
                     sync_plan[c][oid]['projects'].append(r['project'])
 
+    n_skipped = sum(1 for v in check_results.values() if v.get("skip"))
+    n_checked = sum(1 for v in check_results.values() if not v.get("skip"))
+
     json_out = {
         "_summary": {
             "scan_time": scan_time,
@@ -538,7 +619,15 @@ def generate_reports(cluster_results: dict, projects_slice: list,
             "months": months,
             "total_lfs_projects": len(with_lfs),
             "incomplete_projects": len(incomplete),
-        }
+            "skipped_projects": n_skipped,
+            "checked_projects": n_checked,
+        },
+        "check_results": {
+            proj: check_results[proj] for proj in (
+                sorted(proj for proj in check_results if check_results[proj]["status"] == "INCOMPLETE")
+                + sorted(proj for proj in check_results if check_results[proj]["status"] == "COMPLETE")
+            )
+        },
     }
     for c in clusters:
         json_out[c] = {
@@ -554,6 +643,7 @@ def generate_reports(cluster_results: dict, projects_slice: list,
     log(f"   MD:   {out_md}")
     log(f"   JSON: {out_json}")
     log("")
+    log(f"   跳过已 COMPLETE: {n_skipped} 个项目, 实际检查: {n_checked} 个项目")
     for c in clusters:
         n = len(sync_plan[c])
         if n > 0:
@@ -574,6 +664,63 @@ def save_lark_url(url: str):
     Path(LARK_URL_FILE).write_text(url.strip())
 
 
+def split_lark_markdown(content: str, max_table_rows: int = 50) -> list[str]:
+    """将 Markdown 拆成适合飞书批量写入的小块，大表分批并重复表头。"""
+    lines = content.splitlines()
+    chunks = []
+    pending = []
+    i = 0
+
+    def flush_pending():
+        if pending and any(line.strip() for line in pending):
+            chunks.append("\n".join(pending).strip() + "\n")
+        pending.clear()
+
+    while i < len(lines):
+        if (
+            lines[i].startswith("|")
+            and i + 1 < len(lines)
+            and lines[i + 1].startswith("|")
+        ):
+            flush_pending()
+            header = lines[i:i + 2]
+            i += 2
+            rows = []
+            while i < len(lines) and lines[i].startswith("|"):
+                rows.append(lines[i])
+                i += 1
+            for start in range(0, len(rows), max_table_rows):
+                batch = header + rows[start:start + max_table_rows]
+                chunks.append("\n".join(batch) + "\n")
+        else:
+            pending.append(lines[i])
+            i += 1
+
+    flush_pending()
+    return chunks
+
+
+def run_lark_write(cmd: list[str], content: str, env: dict) -> dict:
+    r = subprocess.run(
+        cmd, input=content.encode(), capture_output=True, timeout=120, env=env,
+    )
+    if r.returncode != 0:
+        raise RuntimeError(r.stderr.decode(errors="ignore")[:500])
+    try:
+        response = json.loads(r.stdout)
+    except json.JSONDecodeError as e:
+        raise RuntimeError(f"飞书返回非 JSON: {r.stdout.decode(errors='ignore')[:500]}") from e
+    if not response.get("ok"):
+        raise RuntimeError(f"飞书写入失败: {response}")
+    data = response.get("data", {})
+    if data.get("result") not in (None, "success") or data.get("warnings"):
+        raise RuntimeError(
+            f"飞书写入未完全成功: result={data.get('result')}, "
+            f"warnings={data.get('warnings')}"
+        )
+    return response
+
+
 def upload_to_lark(out_md: str):
     """用 lark-cli 创建/更新飞书文档，标题固定为 FEISHU_DOC_TITLE"""
     url = get_lark_url()
@@ -582,6 +729,10 @@ def upload_to_lark(out_md: str):
     try:
         with open(out_md, encoding="utf-8") as f:
             content = f.read()
+
+        chunks = split_lark_markdown(content)
+        if not chunks:
+            raise RuntimeError("报告内容为空")
 
         cmd = ["lark-cli", "docs"]
         if url:
@@ -600,20 +751,22 @@ def upload_to_lark(out_md: str):
         env["LARKSUITE_CLI_NO_UPDATE_NOTIFIER"] = "1"
         env["LARKSUITE_CLI_NO_SKILLS_NOTIFIER"] = "1"
 
-        r = subprocess.run(cmd, input=content.encode(), capture_output=True, timeout=120, env=env)
-        if r.returncode == 0:
-            try:
-                data = json.loads(r.stdout)
-                new_url = data.get("data", {}).get("document", {}).get("url")
-                if new_url:
-                    save_lark_url(new_url)
-                    log(f"飞书文档: {new_url}")
-                else:
-                    log(f"飞书上传 OK (URL: {url})")
-            except Exception:
-                log(f"飞书: {r.stdout.decode(errors='ignore')[:200]}")
-        else:
-            log(f"飞书上传失败: {r.stderr.decode(errors='ignore')[:300]}")
+        response = run_lark_write(cmd, chunks[0], env)
+        new_url = response.get("data", {}).get("document", {}).get("url")
+        if new_url:
+            url = new_url
+            save_lark_url(new_url)
+
+        for idx, chunk in enumerate(chunks[1:], 2):
+            append_cmd = [
+                "lark-cli", "docs", "+update", "--doc", url,
+                "--command", "append", "--doc-format", "markdown",
+                "--content", "-",
+            ]
+            run_lark_write(append_cmd, chunk, env)
+            log(f"  飞书分段写入 {idx}/{len(chunks)}")
+
+        log(f"飞书文档: {url}")
     except Exception as e:
         log(f"飞书上传异常: {e}")
 
@@ -652,8 +805,8 @@ def main():
     parser.add_argument("--refresh", action="store_true",
                         help="重新跑 Step 1-3 刷新 index (GitLab 项目 + LFS 指针); "
                              "不加则复用已有 index, 只跑 Step 4 (mc stat)")
-    parser.add_argument("-m", "--months", type=int, default=3,
-                        help="刷新 index 时扫描最近 N 个月 (默认 3, 仅在 --refresh 时生效)")
+    parser.add_argument("-m", "--months", type=int, default=6,
+                        help="刷新 index 时扫描最近 N 个月 (默认 6, 仅在 --refresh 时生效)")
     parser.add_argument("-c", "--clusters", nargs="+", default=DEFAULT_CLUSTERS,
                         help=f"MinIO 集群别名列表 (默认: {' '.join(DEFAULT_CLUSTERS)})")
     parser.add_argument("-j", "--jobs", type=int, default=8,
@@ -694,6 +847,8 @@ def main():
     cutoff_iso = index.get("cutoff", "")
     months = index.get("months", args.months)
 
+    prev_check = {} if args.refresh else load_prev_sync(args.json_output)
+
     # 选取要检查的项目集合
     items = list(index["projects"].items())
     if args.max and len(items) > args.max:
@@ -707,16 +862,28 @@ def main():
             print(f"{idx:>4}  {pdata.get('created', ''):10}  LFS={n:<4}  {proj}")
         return
 
+    # --- 标记上次已 COMPLETE 的项目为跳过 ---
+    current_items = {proj for proj, _ in items}
+    skipped_projects = frozenset(
+        proj for proj, r in prev_check.items()
+        if r.get("status") == "COMPLETE" and proj in current_items
+    )
+    if skipped_projects:
+        log(f"从上次检查结果中复用: {len(skipped_projects)} 个已 COMPLETE 项目将跳过 mc stat")
+
     # --- Step 4: mc stat ---
     project_pointers = {p: pdata.get("pointers", []) for p, pdata in items}
     cluster_results = step4_check_clusters(
         project_pointers, args.clusters, args.jobs,
+        skipped_projects=skipped_projects,
     )
 
     # --- 生成报告 ---
     generate_reports(
         cluster_results, items, args.clusters,
         cutoff_iso, months, args.output, args.json_output,
+        skipped_projects=skipped_projects,
+        prev_check_results=prev_check,
     )
 
     # --- 飞书上传 ---
