@@ -113,7 +113,7 @@ contexts:
     cluster: zz-cluster
     user: zz-admin
   name: zz
-current-context: wz
+current-context: bj
 kind: Config
 users:
 - name: bj-admin
